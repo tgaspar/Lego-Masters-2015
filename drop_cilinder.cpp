@@ -19,7 +19,6 @@
  */
 
 #include "ev3dev.h"
-
 #include <thread>
 #include <chrono>
 #include <iostream>
@@ -33,6 +32,11 @@
 #define KEY_PRESS   1
 #define KEY_REPEAT  2
 #endif
+
+#define TOUCH 0
+#define GYRO 1
+#define ULTRASOUND 2
+#define COLOUR 3
 
 using namespace std;
 using namespace ev3dev;
@@ -57,10 +61,10 @@ class control
 public:
   control();
   ~control();
-  
+ 
+  int return_sensor_value(int sensor_type);
   void drive(int speed, int time=0);
-  void turn(int direction);
-  void turn_gyro(int angle);
+  void turn_gyro(int angle, int turn_speed);
   void open_and_close(int angle);
   
   void stop();
@@ -73,7 +77,6 @@ public:
   void terminate_on_key();
   void panic_if_touched();
   
-  void remote_loop();
   void drive_autonomously();
   //void drive_straight();
   
@@ -117,6 +120,19 @@ control::~control()
   reset();
 }
 
+int control::return_sensor_value(int sensor_type)
+{
+
+	switch(sensor_type){
+		case 0:
+			return _sensor_touch.value();
+		case 1:
+			return  _sensor_gyro.value();
+		case 2:
+			return _sensor_ultrasonic.value();
+	}
+
+}
 void control::drive(int speed, int time)
 {
   if (time > 0)
@@ -151,121 +167,47 @@ void control::drive(int speed, int time)
   }
 }
 
-void control::turn(int direction)
+
+void control::turn_gyro(int final_angle,int turn_speed)
 {
-  if (_state != state_idle)
-    stop();
+	if (_state != state_idle)
+		stop();
 
-  if (direction == 0)
-    return;
-	
+	if (final_angle == 0)
+		return;
+	int current_angle = _sensor_gyro.value();
+	int start_angle = _sensor_gyro.value();
+
 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
-	_sensor_ultrasonic.set_mode(ultrasonic_sensor::mode_dist_cm);
-	int angle = _sensor_gyro.value();
-	int startAngle = _sensor_gyro.value();
-	int distance = _sensor_ultrasonic.value();
-  
-  _motor_left.set_run_mode(motor::run_mode_position);
-  //_motor_left.set_position_mode(motor::position_mode_relative);
-  _motor_left.set_position(0);
-  _motor_left .set_position_setpoint(direction);
-  //_motor_left.set_regulation_mode(motor::mode_on);
-  _motor_left.set_duty_cycle_setpoint(50);
 
-  _motor_right.set_run_mode(motor::run_mode_position);
-  //_motor_right.set_position_mode(motor::position_mode_relative);
-  _motor_right.set_position(0);
-  _motor_right.set_position_setpoint(-direction);
-  //_motor_right.set_regulation_mode(motor::mode_on);
-  _motor_right.set_duty_cycle_setpoint(50);
-  
-  _state = state_turning;
+	_motor_left.set_run_mode(motor::run_mode_forever);
+	_motor_right.set_run_mode(motor::run_mode_forever);
 
-  _motor_left .run();
-  _motor_right.run();
+	_motor_left.set_regulation_mode(motor::mode_on);
+	_motor_right.set_regulation_mode(motor::mode_on);
 
-  while (_motor_left.running() || _motor_right.running())
+
+	_motor_left.set_pulses_per_second_setpoint(turn_speed);
+	_motor_right.set_pulses_per_second_setpoint(-turn_speed);
+
+
+	_state = state_turning;
+
+	_motor_left.run();
+	_motor_right.run();
+
+	while (_motor_left.running() || _motor_right.running())
 	{
-		angle = _sensor_gyro.value();
-		distance = _sensor_ultrasonic.value();
-		this_thread::sleep_for(chrono::milliseconds(10));
-		sensorlog << angle << "," << distance << "\n";
-		cout <<"startAngle - angle: " << startAngle - angle << "\n";
-		if(abs(startAngle - angle) > 360)
+		current_angle = _sensor_gyro.value();
+	
+		if(abs(start_angle - current_angle) > final_angle)
 		{
-				cout << "The motor should be stopping by now! \n";
 				_motor_left.stop();
 				_motor_right.stop();
 				break;
 		}
 	}
-
-  _state = state_idle;
-}
-
-void control::turn_gyro(int final_angle)
-{
-  if (_state != state_idle)
-    stop();
-
-  if (final_angle == 0)
-    return;
-	
-	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
-	_sensor_ultrasonic.set_mode(ultrasonic_sensor::mode_dist_cm);
-	int angle = _sensor_gyro.value();
-	int startAngle = _sensor_gyro.value();
-	int distance = _sensor_ultrasonic.value();
-	
-  _motor_left .set_run_mode(motor::run_mode_forever);
-  _motor_right.set_run_mode(motor::run_mode_forever);
-  
-  _motor_left.set_regulation_mode(motor::mode_on);
-  _motor_right.set_regulation_mode(motor::mode_on);
-  
-  
-  _motor_left.set_pulses_per_second_setpoint(100);
-  _motor_right.set_pulses_per_second_setpoint(-100);
-  
-  cout << "Left motor PPS set point: " << _motor_left.pulses_per_second_setpoint() << "\n";
-  cout << "Right motor PPS set point: " << _motor_right.pulses_per_second_setpoint() << "\n";
-  
-  _state = state_turning;
-
-  _motor_left.run();
-  _motor_right.run();
-
-  while (_motor_left.running() || _motor_right.running())
-	{
-		angle = _sensor_gyro.value();
-		
-		if (_sensor_ultrasonic.value() > 2500)
-		{
-			distance = distance;
-			//cout << "The proximity value is weird, mate! \n";
-			//_motor_left.stop();
-			//_motor_right.stop();
-			//break;
-		}
-		else
-		{
-			distance = _sensor_ultrasonic.value();
-		}
-		
-		distance = _sensor_ultrasonic.value();
-	
-		//this_thread::sleep_for(chrono::milliseconds(10));
-		sensorlog << startAngle - angle << "," << distance << "\n";
-		//cout <<"distance =  " << distance << "\n";
-		if(abs(startAngle - angle) > final_angle)
-		{
-				cout << "The motor should be stopping by now! \n";
-				_motor_left.stop();
-				_motor_right.stop();
-				break;
-		}
-	}
- _state = state_idle;
+	_state = state_idle;
 }
 
 void control::open_and_close(int angle)
@@ -307,9 +249,47 @@ void control::reset()
 
 bool control::initialized() const
 {
-  return (_motor_left .connected() &&
+
+if (!_motor_left.connected())
+{
+	cout << "Left motor not connected\n";
+}
+else
+{
+	cout << "Left motor is connected\n";
+}
+
+if (!_motor_right.connected())
+{
+	cout << "Right motor not connected\n";
+}
+else
+{
+	cout << "Right motor is connected\n";
+}
+
+if (!_sensor_gyro.connected())
+{
+	cout << "Gyro sensor not connected\n";
+}
+else
+{
+	cout << "Gyro sensor is connected\n";
+
+}
+
+if (!_sensor_ultrasonic.connected())
+{
+	cout << "Ultrasonic sensor not connected\n";
+}
+else
+{
+	cout << "Ultrasonic sensor is connected\n";
+}
+
+  return (_motor_left.connected() &&
           _motor_right.connected() &&
-		  _sensor_gyro.connected() &&
+	  _sensor_gyro.connected() &&
           _sensor_ultrasonic.connected());
 }
 
@@ -390,75 +370,6 @@ void control::panic_if_touched()
   t.detach();
 }
 
-void control::remote_loop()
-{
-  remote_control r(_sensor_ir);
-  
-  if (!r.connected())
-  {
-    cout << "no infrared sensor found!" << endl;
-    return;
-  }
-  
-  const int speed = 70;
-  const int ninety_degrees = 260;
-  
-  r.on_red_up = [&] (bool state)
-  {
-    if (state)
-    {
-      if (_state == state_idle)
-        drive(speed);
-    }
-    else
-      stop();
-  };
-  
-  r.on_red_down = [&] (bool state)
-  {
-    if (state)
-    {
-      if (_state == state_idle)
-        drive(-speed);
-    }
-    else
-      stop();
-  };
-
-  r.on_blue_up = [&] (bool state)
-  {
-    if (state)
-    {
-      if (_state == state_idle)
-        turn(-ninety_degrees);
-    }
-  };
-  
-  r.on_blue_down = [&] (bool state)
-  {
-    if (state)
-    {
-      if (_state == state_idle)
-        turn(ninety_degrees);
-    }
-  };
-  
-  r.on_beacon = [&] (bool state)
-  {
-    if (state)
-      terminate();
-  };
-  
-  while (!_terminate)
-  {
-    if (!r.process())
-    {
-      this_thread::sleep_for(chrono::milliseconds(10));
-    }
-  }
-  
-  reset();
-}
 
 void control::drive_autonomously()
 {
@@ -492,37 +403,21 @@ int main()
 	battery_status();
 	control c;
 
-	sensorlog.open ("sensorlog.csv");
-
 	cout << "Initializing \n";
 
 	c.initialize();
+	c.initialized();
 
-	//if (c.initialized())
-	//{
+	cout << "Press the touch sensor to make robot turn\n";
 
-	// change mode to 1 to get IR remote mode
-	// change mode to 3 for wooot?
+	while (!c.return_sensor_value(TOUCH));
+
 	int mode = 3;
 
-	//c.turn_gyro(380);
-	cout << "It should go to the open_and_close function now! \n";
-	c.open_and_close(40);
+
+	c.turn_gyro(30, 600);
 	c.stop();
 
-	c.terminate_on_key(); // we terminate if a button is pressed
-	c.panic_if_touched(); // we panic if the touch sensor is triggered
-
-
-	//}
-	/*
-	else
-	{
-	cout << "you need to connect an infrared sensor and large motors to ports B and C!" << endl;
-	return 1;
-	}
-	*/
-	sensorlog.close(); 
 
 	return 0;
 }
