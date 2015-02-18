@@ -1,28 +1,9 @@
-/*
- *Copyright (c) 2014 - Franz Detro
- *
- * Some real world test program for motor control
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
-
 #include "ev3dev.h"
 #include <thread>
 #include <chrono>
 #include <iostream>
 #include <fstream>
+#include <cmath>
 
 #ifndef NO_LINUX_HEADERS
 #include <unistd.h>
@@ -64,7 +45,8 @@ public:
  
   int return_sensor_value(int sensor_type);
   void drive(int speed, int time=0);
-  void turn_gyro(int angle, int turn_speed);
+  void drive_ultrasonic(int drive_distance);
+  void turn_gyro(int turn_angle);
   void open_and_close(int angle);
   
   void stop();
@@ -167,40 +149,162 @@ void control::drive(int speed, int time)
   }
 }
 
-
-void control::turn_gyro(int final_angle,int turn_speed)
+void control::drive_ultrasonic(int drive_distance)
 {
 	if (_state != state_idle)
 		stop();
-
-	if (final_angle == 0)
+	
+	if (drive_distance < 10)
 		return;
-	int current_angle = _sensor_gyro.value();
-	int start_angle = _sensor_gyro.value();
-
-	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
-
+	
+	int distance_difference = 0;
+	int start_distance = 0;
+	int final_difference = 0;
+	int wheel_turning_speed_left = 0;
+	int wheel_turning_speed_right = 0;
+	
+	int turn_degrees = 0;
+	
+	double wheel_length = 345.4;
+	
+	turn_degrees = int(2*(drive_distance/wheel_length)*360);
+	
+	cout << "turn_degrees = " << turn_degrees << "\n";	
+	
+	_motor_right.reset();
+	_motor_left.reset();
+	
+	_motor_left.set_run_mode(motor::run_mode_position);
+	_motor_right.set_run_mode(motor::run_mode_position);
+	
+	_motor_left.set_regulation_mode(motor::mode_on);
+	_motor_right.set_regulation_mode(motor::mode_on);
+	
+	_motor_left.set_position_mode(motor::position_mode_absolute);
+	_motor_right.set_position_mode(motor::position_mode_absolute);
+	
+	_motor_left.set_position_setpoint(_motor_left.position() + turn_degrees);
+	_motor_right.set_position_setpoint(_motor_right.position() + turn_degrees);
+	
+	_motor_left.set_pulses_per_second_setpoint(100);
+	_motor_right.set_pulses_per_second_setpoint(100);
+	
+	_motor_left.run();
+	_motor_right.run();
+	
+	cout << "_motor_left.position() = " << _motor_left.position() << "\n";
+	cout << "_motor_right.position() = " << _motor_right.position() << "\n";
+	_state = state_turning;
+	/*
+	_sensor_ultrasonic.set_mode(ultrasonic_sensor::mode_dist_cm);
+	
 	_motor_left.set_run_mode(motor::run_mode_forever);
 	_motor_right.set_run_mode(motor::run_mode_forever);
 
 	_motor_left.set_regulation_mode(motor::mode_on);
 	_motor_right.set_regulation_mode(motor::mode_on);
 
-
-	_motor_left.set_pulses_per_second_setpoint(turn_speed);
-	_motor_right.set_pulses_per_second_setpoint(-turn_speed);
-
+	_motor_left.set_pulses_per_second_setpoint(0);
+	_motor_right.set_pulses_per_second_setpoint(0);
 
 	_state = state_turning;
 
 	_motor_left.run();
 	_motor_right.run();
-
+	
+	start_distance = _sensor_ultrasonic.value();
+	
+	final_difference = start_distance - drive_distance;
+	cout << "_sensor_ultrasonic.value() = " << _sensor_ultrasonic.value() << "\n";
+	cout << "final_difference =" << final_difference  << "\n";
+	
 	while (_motor_left.running() || _motor_right.running())
 	{
-		current_angle = _sensor_gyro.value();
+		distance_difference = start_distance - _sensor_ultrasonic.value();
+		
+		wheel_turning_speed = (_sensor_ultrasonic.value() - final_difference)*5;
+		
+		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed);
+		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed);	
+		
+		if (wheel_turning_speed < 50)
+			wheel_turning_speed = 50;
+		
+		if(distance_difference >= drive_distance)
+		{
+			cout << "distance_difference = " << distance_difference << "\n";
+			cout << "_sensor_ultrasonic.value() = " << _sensor_ultrasonic.value() << "\n";
+			_motor_left.stop();
+			_motor_right.stop();
+			break;
+	}
+	*/
+	while (_motor_left.running() || _motor_right.running())
+	{
+		wheel_turning_speed_left = (turn_degrees - _motor_left.position());
+		wheel_turning_speed_right = (turn_degrees - _motor_right.position());
+		
+		if(wheel_turning_speed_left > 800)
+			wheel_turning_speed_left = 800;
+		
+		if(wheel_turning_speed_right > 800)
+			wheel_turning_speed_right = 800;
+		
+		if(wheel_turning_speed_left < 60)
+			wheel_turning_speed_left = 60;
+		
+		if(wheel_turning_speed_right < 60)
+			wheel_turning_speed_right = 60;
+		
+		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed_left);
+		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed_right);
 	
-		if(abs(start_angle - current_angle) > final_angle)
+	}
+	
+	_state = state_idle;
+}
+
+void control::turn_gyro(int turn_angle)
+{
+	if (_state != state_idle)
+		stop();
+
+	if (turn_angle	 == 0)
+		return;
+	int angle_difference = 0;
+	int start_angle = _sensor_gyro.value();
+
+	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
+
+	_motor_right.reset();
+	_motor_left.reset();
+	
+	_motor_left.set_run_mode(motor::run_mode_forever);
+	_motor_right.set_run_mode(motor::run_mode_forever);
+	
+	_motor_left.set_regulation_mode(motor::mode_on);
+	_motor_right.set_regulation_mode(motor::mode_on);
+	
+	_motor_left.run();
+	_motor_right.run();
+
+	
+	_state = state_turning;
+	while (_motor_left.running() || _motor_right.running())
+	{
+		angle_difference  = start_angle - _sensor_gyro.value();
+			
+		int wheel_turning_speed = int(turn_angle - angle_difference)*5;
+		
+		if(wheel_turning_speed  > 800)
+			wheel_turning_speed = 800;
+		if(wheel_turning_speed < 50)
+			wheel_turning_speed = 50;
+		
+		_motor_left.set_pulses_per_second_setpoint(-wheel_turning_speed);
+		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed);
+	
+		if(angle_difference > turn_angle)
 		{
 				_motor_left.stop();
 				_motor_right.stop();
@@ -311,11 +415,11 @@ bool control::initialize()
 	_motor_dropper.set_run_mode(motor::run_mode_position);
 	
 	cout << "Initialization done! \n";
-	/*
+	
 	//Initialize sensors
 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
 	_sensor_ultrasonic.set_mode(ultrasonic_sensor::mode_dist_cm);
-	*/
+	
 }
 
 
@@ -408,14 +512,25 @@ int main()
 	c.initialize();
 	c.initialized();
 
-	cout << "Press the touch sensor to make robot turn\n";
+	cout << "Press the touch sensor to start \n";
 
 	while (!c.return_sensor_value(TOUCH));
 
 	int mode = 3;
 
+	cout << "Touch sensor pressed !! \n";
 
-	c.turn_gyro(30, 600);
+	c.turn_gyro(90);
+	
+		
+	c.drive_ultrasonic(500);
+	
+	c.turn_gyro(180);
+	
+	c.drive_ultrasonic(100);
+	
+	c.turn_gyro(270);
+	
 	c.stop();
 
 

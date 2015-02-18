@@ -20,4 +20,8 @@ clean:
 
 all: drop_cilinder
 
+install: all
+	rm -f *.o *~ drop_cilinder
+
+
 
