@@ -268,8 +268,6 @@ void control::drive_ultrasonic(int drive_distance)
 			break;
 	}
 	*/
-
-
 	while (_motor_left.running() || _motor_right.running())
 	{
 		wheel_turning_speed_left = (turn_degrees - _motor_left.position());
