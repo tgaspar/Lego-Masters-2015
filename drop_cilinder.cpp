@@ -22,12 +22,57 @@
 #define DEGTORAD 3.141592653589793 / 180.0
 #define RADTODEG 180.0 / 3.141592653589793
 
+#define SIZEX 18
+#define SIZEY 10
+
 using namespace std;
 using namespace ev3dev;
   
   
-ofstream		 sensorlog;
-  
+ofstream sensorlog;
+
+
+//***************************************************************
+// MAPS VARIABLES
+//***************************************************************
+int bigColorMap[SIZEY*SIZEX] = 
+{
+//X->	00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17// Y
+	4, 1, 3, 4, 3, 2, 4, 3, 1, 5, 1, 3, 5, 2, 1, 4, 1, 3,// 00
+	0, 3, 1, 1, 3, 0, 2, 2, 2, 0, 2, 2, 5, 2, 2, 2, 5, 1,// 01
+	4, 1, 3, 0, 3, 1, 3, 5, 4, 2, 2, 3, 2, 2, 2, 0, 1, 0,// 02
+	1, 2, 2, 3, 5, 3, 1, 3, 2, 0, 3, 5, 1, 0, 5, 4, 0, 2,// 03
+	4, 0, 4, 3, 2, 3, 2, 5, 4, 0, 5, 3, 2, 4, 4, 0, 0, 4,// 04
+	0, 3, 1, 3, 5, 2, 0, 1, 4, 5, 4, 4, 4, 3, 3, 3, 2, 2,// 05
+	1, 3, 1, 5, 5, 4, 2, 3, 5, 1, 0, 3, 1, 5, 1, 3, 2, 0,// 06
+	5, 4, 2, 0, 5, 3, 3, 1, 2, 4, 2, 3, 5, 4, 1, 1, 0, 4,// 07
+	5, 3, 2, 0, 2, 2, 3, 4, 2, 0, 1, 1, 2, 4, 4, 0, 5, 1,// 08
+	1, 2, 5, 1, 5, 0, 5, 0, 4, 4, 1, 4, 4, 0, 2, 2, 0, 2 // 09
+};
+
+int numColorsRead = 0;
+int readColors[SIZEY*SIZEX] = {0};
+int matchesSum = 0;
+int matchesArray[4] = {0};
+int orientationMultiplier = 0;
+
+//***************************************************************  
+
+void display_map(){
+cout << "++++++++++++++++++++++++++++++++++++++++\n";
+	for(int y = 0; y < SIZEY; y++)
+	{
+		for(int x = 0; x < SIZEX; x++)
+		{
+			cout << bigColorMap[(y*SIZEX) + x] << " ";
+		}
+	cout << "\n";
+	}
+cout << "++++++++++++++++++++++++++++++++++++++++\n";
+}
+
+
+
 void battery_status()
 {
 	char c = 0;
@@ -63,7 +108,9 @@ public:
 	robot_info return_robot_info();
 
 	int return_sensor_value(int sensor_type);
+	int return_color_value();
 	void print_rgb_values();
+	void compare_read_colors();
 
 	void drive(int speed, int time=0);
 	void drive_ultrasonic(int drive_distance);
@@ -149,6 +196,31 @@ int control::return_sensor_value(int sensor_type)
 			return _sensor_ultrasonic.value();
 	}
 }
+int control::return_color_value()
+{
+	double red = _sensor_color.value(0)/255.0;
+	double green = _sensor_color.value(1)/255.0;
+	double blue = _sensor_color.value(2)/255.0;
+	int color = 0;
+
+	if((red > 0.2) && (green > 0.2) && (red > 0.2))
+		color = 5;
+	else if((red < 0.03) && (green < 0.03) && (red < 0.03))
+		color = 0;
+	else if((red + green > 2*blue) && (red + green > 0.3) && (blue < 0.05))
+		color = 4;
+	else if((red > green) && (red > blue))
+		color = 1;
+	else if((green > red) && (green > blue)) 
+		color = 2;
+	else if((blue > red) && (blue > green))
+		color = 3;
+	else
+		color = -1;
+
+	return color;
+}
+
 void control::print_rgb_values()
 {
 	double red = _sensor_color.value(0)/255.0;
@@ -200,6 +272,199 @@ void control::print_rgb_values()
 	}
 
 }
+void control::compare_read_colors()
+{
+	int colorsSum = -1;
+	int numberOfMatches0 = 0;
+	int numberOfMatches1 = 0;
+	int numberOfMatches2 = 0;
+	int numberOfMatches3 = 0;
+	
+	
+	for(int y = 0; y < (SIZEY); y++)
+	{
+		for(int x = 0; x < (SIZEX - numColorsRead + 1); x++)
+		{
+			int u = 0;
+			colorsSum = 0;
+			for(int i = 0; i< numColorsRead; i++)
+			{
+				colorsSum += abs(readColors[i] - bigColorMap[(y*SIZEX) + x + u]);
+				u++;
+			}	
+			if(colorsSum == 0)
+				numberOfMatches0++;
+		}
+	}
+	
+	for(int y = 0; y < (SIZEY); y++)
+	{
+		for(int x = 0; x < (SIZEX - numColorsRead + 1); x++)
+		{
+			colorsSum = 0;
+			int u = 0;
+			for(int i = 0; i< numColorsRead; i++)
+			{	
+				colorsSum += abs(readColors[numColorsRead - (i+1)] - bigColorMap[(y*SIZEX) + x + u]);
+				u++;
+			}	
+			if(colorsSum == 0)
+				numberOfMatches1++;
+		}
+	}
+	
+	for(int y = 0; y < (SIZEY); y++)
+	{
+		for(int x = 0; x < (SIZEX - numColorsRead + 1); x++)
+		{
+			colorsSum = 0;
+			int u = 0;
+			colorsSum = 0;
+			for(int i = 0; i< numColorsRead; i++)
+			{
+				colorsSum += abs(readColors[i] - bigColorMap[(y*SIZEX) + x + u*SIZEX]);
+				u++;
+			}	
+			if(colorsSum == 0)
+				numberOfMatches2++;
+		}
+	}
+	
+	for(int y = 0; y < (SIZEY); y++)
+	{
+		for(int x = 0; x < (SIZEX - numColorsRead + 1); x++)
+		{
+			colorsSum = 0;
+			int u = 0;
+			colorsSum = 0;
+			for(int i = 0; i< numColorsRead; i++)
+			{
+				colorsSum += abs(readColors[numColorsRead - (i+1)] - bigColorMap[(y*SIZEX) + x + u*SIZEX]);
+				u++;
+			}	
+			if(colorsSum == 0)
+				numberOfMatches3++;
+		}
+	}
+	matchesArray[0] = numberOfMatches0;
+	matchesArray[1] = numberOfMatches1;
+	matchesArray[2] = numberOfMatches2;
+	matchesArray[3] = numberOfMatches3;
+
+	matchesSum = numberOfMatches0 + numberOfMatches1 + numberOfMatches2 + numberOfMatches3;
+	
+	if(matchesSum == 1)
+	{
+		cout << "The requirements for localization are met !! \n";
+		for (int i = 0; i < 4; i++)
+		{
+			cout << "matchesArray[" << i << "]" << matchesArray[i] << "\n\n";
+			if(matchesArray[i] == 1)
+			{
+				switch(i)
+				{
+					case 0:
+						orientationMultiplier = 0;
+						for(int y = 0; y < (SIZEY); y++)
+						{
+							for(int x = 0; x < (SIZEX - numColorsRead + 1); x++)
+							{
+								int u = 0;
+								colorsSum = 0;
+								for(int i = 0; i< numColorsRead; i++)
+								{
+									colorsSum += abs(readColors[i] - bigColorMap[(y*SIZEX) + x + u]);
+									u++;
+								}	
+								if(colorsSum == 0)
+								{	
+										robot_coordinates.X = (x + numColorsRead) - 1;
+										robot_coordinates.Y = y;
+										robot_coordinates.angle = 0;
+								}
+							}
+						}
+						break;
+					case 1:
+						orientationMultiplier = 2;
+						for(int y = 0; y < (SIZEY); y++)
+						{
+							for(int x = 0; x < (SIZEX - numColorsRead + 1); x++)
+							{
+								colorsSum = 0;
+								int u = 0;
+								for(int i = 0; i< numColorsRead; i++)
+								{	
+									colorsSum += abs(readColors[numColorsRead - (i+1)] - bigColorMap[(y*SIZEX) + x + u]);
+									u++;
+								}	
+								if(colorsSum == 0)
+								{
+									robot_coordinates.X = x;
+									robot_coordinates.Y = y;
+									robot_coordinates.angle = 180;
+								}
+							}
+						}
+						break;
+					case 2:
+						orientationMultiplier = 1;
+						for(int y = 0; y < (SIZEY); y++)
+						{
+							for(int x = 0; x < (SIZEX - numColorsRead + 1); x++)
+							{
+								colorsSum = 0;
+								int u = 0;
+								colorsSum = 0;
+								for(int i = 0; i< numColorsRead; i++)
+								{
+									colorsSum += abs(readColors[i] - bigColorMap[(y*SIZEX) + x + u*SIZEX]);
+									u++;
+								}	
+								if(colorsSum == 0)
+								{
+									robot_coordinates.X = x;
+									robot_coordinates.Y = y + numColorsRead;
+									robot_coordinates.angle = 90;
+								}
+							}
+						}
+						break;
+					case 3:
+						orientationMultiplier = 3;
+						for(int y = 0; y < (SIZEY); y++)
+						{
+							for(int x = 0; x < (SIZEX - numColorsRead + 1); x++)
+							{
+								colorsSum = 0;
+								int u = 0;
+								colorsSum = 0;
+								for(int i = 0; i< numColorsRead; i++)
+								{
+									colorsSum += abs(readColors[numColorsRead - (i+1)] - bigColorMap[(y*SIZEX) + x + u*SIZEX]);
+									u++;
+								}	
+								if(colorsSum == 0)
+								{
+									robot_coordinates.X = x;
+									robot_coordinates.Y = y;
+									robot_coordinates.angle = 270;
+								}
+							}
+						}
+						break;
+					default:
+						orientationMultiplier = -1;
+						break;
+				}
+			robot_coordinates.X = robot_coordinates.X*100;
+			robot_coordinates.Y = robot_coordinates.Y*100;
+			break;
+			}
+		}
+	}
+}
+
 
 void control::drive(int speed, int time)
 {
@@ -269,6 +534,7 @@ void control::drive_ultrasonic(int drive_distance)
 	_motor_right.set_position_mode(motor::position_mode_absolute);
 	
 	_motor_left.set_position_setpoint(_motor_left.position() + turn_degrees);
+	
 	_motor_right.set_position_setpoint(_motor_right.position() + turn_degrees);
 	
 	_motor_left.set_pulses_per_second_setpoint(100);
@@ -331,11 +597,11 @@ void control::drive_ultrasonic(int drive_distance)
 		wheel_turning_speed_left = (turn_degrees - _motor_left.position());
 		wheel_turning_speed_right = (turn_degrees - _motor_right.position());
 
-		if(wheel_turning_speed_left > 800)
-			wheel_turning_speed_left = 800;
+		if(wheel_turning_speed_left > 750)
+			wheel_turning_speed_left = 750;
 		
-		if(wheel_turning_speed_right > 800)
-			wheel_turning_speed_right = 800;
+		if(wheel_turning_speed_right > 750)
+			wheel_turning_speed_right = 750;
 		
 		if(wheel_turning_speed_left < 60)
 			wheel_turning_speed_left = 60;
@@ -345,6 +611,7 @@ void control::drive_ultrasonic(int drive_distance)
 
 		gyroCorrection = gyroCorrection + (_sensor_gyro.value()*gyroGain)*(wheel_turning_speed_left*1.0)/800;
 
+		gyroCorrection = (_sensor_gyro.value()*2);
 		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed_left - gyroCorrection);
 		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed_right + gyroCorrection);	
 
@@ -638,16 +905,19 @@ void printRobotStatus(control lego_robot)
 int main()
 {
 	int modeSelect = 0;
+	
+	battery_status();
 	cout << "Please select a mode. \n";
 	cout << "Possible modes are: \n";
 	cout << "Drop the cilinder -> 1 \n";
 	cout << "Drive around -> 2 \n";
 	cout << "Color reading -> 3 \n";
+	cout << "Drive around and read colors -> 4 \n";
+	cout << "Localization test -> 5 \n";
 	cin >> modeSelect;
 
 	printf("Selected mode is %d", modeSelect);
 
-	battery_status();
 	control lego_robot;
 
 	cout << "Initializing \n";
@@ -659,11 +929,9 @@ int main()
 
 	cout << "Press the touch sensor to start \n";
 
-	while (!lego_robot.return_sensor_value(TOUCH));
+	//while (!lego_robot.return_sensor_value(TOUCH));
 
 	cout << "Touch sensor pressed !! \n";
-
-	
 
 	switch (modeSelect)
 	{
@@ -682,37 +950,73 @@ int main()
 		lego_robot.turn_gyro(180);
 		printRobotStatus(lego_robot);
 		break;
-	case 3:
-		//for(int i = 0; i < 7; i++)
-		//{	
-			while (lego_robot.return_sensor_value(TOUCH));			
-			cout << "Press button to read the BLACK color sensor values \n";
-			while (!lego_robot.return_sensor_value(TOUCH));
-			while (lego_robot.return_sensor_value(TOUCH));
-			lego_robot.print_rgb_values();
-			cout << "Press button to read the RED color sensor values \n";
-			while (!lego_robot.return_sensor_value(TOUCH));
-			while (lego_robot.return_sensor_value(TOUCH));
-			lego_robot.print_rgb_values();
-			cout << "Press button to read the GREEN color sensor values \n";
-			while (!lego_robot.return_sensor_value(TOUCH));
-			while (lego_robot.return_sensor_value(TOUCH));
-			lego_robot.print_rgb_values();
-			cout << "Press button to read the BLUE color sensor values \n";
-			while (!lego_robot.return_sensor_value(TOUCH));
-			while (lego_robot.return_sensor_value(TOUCH));
-			lego_robot.print_rgb_values();
-			cout << "Press button to read the YELLOW color sensor values \n";
-			while (!lego_robot.return_sensor_value(TOUCH));
-			while (lego_robot.return_sensor_value(TOUCH));
-			lego_robot.print_rgb_values();
-			cout << "Press button to read the WHITE color sensor values \n";
-			while (!lego_robot.return_sensor_value(TOUCH));
-			while (lego_robot.return_sensor_value(TOUCH));
-			lego_robot.print_rgb_values();
-
-		//}
-
+	case 3:	
+		while (lego_robot.return_sensor_value(TOUCH));			
+		cout << "Press button to read the BLACK color sensor values \n";
+		while (!lego_robot.return_sensor_value(TOUCH));
+		while (lego_robot.return_sensor_value(TOUCH));
+		lego_robot.print_rgb_values();
+		cout << "Press button to read the RED color sensor values \n";
+		while (!lego_robot.return_sensor_value(TOUCH));
+		while (lego_robot.return_sensor_value(TOUCH));
+		lego_robot.print_rgb_values();
+		cout << "Press button to read the GREEN color sensor values \n";
+		while (!lego_robot.return_sensor_value(TOUCH));
+		while (lego_robot.return_sensor_value(TOUCH));
+		lego_robot.print_rgb_values();
+		cout << "Press button to read the BLUE color sensor values \n";
+		while (!lego_robot.return_sensor_value(TOUCH));
+		while (lego_robot.return_sensor_value(TOUCH));
+		lego_robot.print_rgb_values();
+		cout << "Press button to read the YELLOW color sensor values \n";
+		while (!lego_robot.return_sensor_value(TOUCH));
+		while (lego_robot.return_sensor_value(TOUCH));
+		lego_robot.print_rgb_values();
+		cout << "Press button to read the WHITE color sensor values \n";
+		while (!lego_robot.return_sensor_value(TOUCH));
+		while (lego_robot.return_sensor_value(TOUCH));
+		lego_robot.print_rgb_values();
+		break;
+	case 4:
+		this_thread::sleep_for(chrono::milliseconds(1000));
+		lego_robot.drive_ultrasonic(100);
+		lego_robot.print_rgb_values();
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.turn_gyro(90);
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.drive_ultrasonic(100);
+		lego_robot.print_rgb_values();
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.turn_gyro(90);
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.drive_ultrasonic(100);
+		lego_robot.print_rgb_values();
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.turn_gyro(90);
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.drive_ultrasonic(100);
+		lego_robot.print_rgb_values();
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.turn_gyro(90);
+		printRobotStatus(lego_robot);
+	case 5:
+		while (lego_robot.return_sensor_value(TOUCH));
+		this_thread::sleep_for(chrono::milliseconds(500));
+		while(matchesSum != 1)
+		{
+			readColors[numColorsRead] = lego_robot.return_color_value();
+			numColorsRead += 1;
+			lego_robot.compare_read_colors();
+			cout << "numColorsRead = " << numColorsRead << "\n";
+			cout << "******************************* \n\n";
+			if(matchesSum != 1)
+			{
+				cout << "Driving ... \n";
+				lego_robot.drive_ultrasonic(100);	
+			}
+		}
+		printRobotStatus(lego_robot);
+		
 		break;
 	default:
 		cout << "Wrong mode selected !!";
