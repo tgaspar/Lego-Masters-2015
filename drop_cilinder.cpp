@@ -1008,7 +1008,7 @@ int main()
 			numColorsRead += 1;
 			lego_robot.compare_read_colors();
 			cout << "numColorsRead = " << numColorsRead << "\n";
-			cout << "******************************* \n\n";
+			cout << "******************************** \n\n";
 			if(matchesSum != 1)
 			{
 				cout << "Driving ... \n";
