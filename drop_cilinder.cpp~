@@ -268,15 +268,14 @@ void control::drive_ultrasonic(int drive_distance)
 			break;
 	}
 	*/
+	
+	double gyroCorrection = 0;
+	double gyroGain = 0.1;
+	
 	while (_motor_left.running() || _motor_right.running())
 	{
 		wheel_turning_speed_left = (turn_degrees - _motor_left.position());
 		wheel_turning_speed_right = (turn_degrees - _motor_right.position());
-
-		int gyroGain = 1;
-
-		wheel_turning_speed_left = wheel_turning_speed_left + _sensor_gyro.value();	
-		wheel_turning_speed_left = wheel_turning_speed_left - _sensor_gyro.value();
 
 		if(wheel_turning_speed_left > 800)
 			wheel_turning_speed_left = 800;
@@ -289,10 +288,18 @@ void control::drive_ultrasonic(int drive_distance)
 		
 		if(wheel_turning_speed_right < 60)
 			wheel_turning_speed_right = 60;
-		
-		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed_left);
-		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed_right);
-	
+
+		gyroCorrection = gyroCorrection + (_sensor_gyro.value()*gyroGain)*(wheel_turning_speed_left*1.0)/800;
+
+		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed_left - gyroCorrection);
+		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed_right + gyroCorrection);	
+
+/*
+		cout << "gyroCorrection = " << gyroCorrection << "\n";
+		cout << "_sensor_gyro.value() = " << _sensor_gyro.value()<< "\n";
+		cout << "_motor_right.pulses_per_second_setpoint = " << _motor_right.pulses_per_second_setpoint() << "\n";
+		cout << "_motor_left.pulses_per_second_setpoint = " << _motor_left.pulses_per_second_setpoint() << "\n";		
+*/	
 	}
 
 	robot_coordinates.X = robot_coordinates.X + cos(robot_coordinates.angle*DEGTORAD)*drive_distance;
@@ -592,18 +599,20 @@ int main()
 
 	printRobotStatus(lego_robot);
 
-	lego_robot.turn_gyro(90);		
+	//lego_robot.turn_gyro(90);		
+	this_thread::sleep_for(chrono::milliseconds(1000));
+	lego_robot.drive_ultrasonic(1000);
+	printRobotStatus(lego_robot);
 	lego_robot.drive_ultrasonic(500);
-	printRobotStatus(lego_robot);
-
 	lego_robot.turn_gyro(180);
-	lego_robot.drive_ultrasonic(100);	
-	printRobotStatus(lego_robot);	
 
-	lego_robot.turn_gyro(270);
-	printRobotStatus(lego_robot);
+	//lego_robot.drive_ultrasonic(100);	
+	//printRobotStatus(lego_robot);	
 
-	lego_robot.stop();
+	//lego_robot.turn_gyro(270);
+	//printRobotStatus(lego_robot);
+
+	//lego_robot.stop();
 
 
 	return 0;
