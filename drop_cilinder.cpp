@@ -63,6 +63,8 @@ public:
 	robot_info return_robot_info();
 
 	int return_sensor_value(int sensor_type);
+	void print_rgb_values();
+
 	void drive(int speed, int time=0);
 	void drive_ultrasonic(int drive_distance);
 	void turn_gyro(int turn_angle);
@@ -95,14 +97,15 @@ private:
 
  
 protected:
-	large_motor     _motor_left;
-	large_motor     _motor_right;
-	medium_motor	  _motor_dropper;
-	infrared_sensor _sensor_ir;
-	touch_sensor    _sensor_touch;
+	large_motor		_motor_left;
+	large_motor    		_motor_right;
+	medium_motor		_motor_dropper;
+	infrared_sensor 	_sensor_ir;
+	touch_sensor   	 	_sensor_touch;
 	ultrasonic_sensor	_sensor_ultrasonic;
-	gyro_sensor	  _sensor_gyro;
-	lcd			  _lcd;
+	gyro_sensor	 	_sensor_gyro;
+	color_sensor		_sensor_color;
+	lcd			_lcd;
 
 enum state
 	{
@@ -145,6 +148,57 @@ int control::return_sensor_value(int sensor_type)
 		case 2:
 			return _sensor_ultrasonic.value();
 	}
+}
+void control::print_rgb_values()
+{
+	double red = _sensor_color.value(0)/255.0;
+	double green = _sensor_color.value(1)/255.0;
+	double blue = _sensor_color.value(2)/255.0;
+	int color = 0;
+
+	cout << "_sensor_color.value(0) = " << red << "\n";
+	cout << "_sensor_color.value(1) = " << green << "\n";
+	cout << "_sensor_color.value(2) = " << blue << "\n";
+
+	if((red > 0.2) && (green > 0.2) && (red > 0.2))
+		color = 5;
+	else if((red < 0.03) && (green < 0.03) && (red < 0.03))
+		color = 0;
+	else if((red + green > 2*blue) && (red + green > 0.3) && (blue < 0.05))
+		color = 4;
+	else if((red > green) && (red > blue))
+		color = 1;
+	else if((green > red) && (green > blue)) 
+		color = 2;
+	else if((blue > red) && (blue > green))
+		color = 3;
+	else
+		color = -1;
+
+	switch(color)
+	{
+		case 0:
+			cout << "Colour is BLACK\n";
+			break;
+		case 1:
+			cout << "Colour is RED\n";
+			break;
+		case 2:
+			cout << "Colour is GREEN\n";
+			break;
+		case 3:
+			cout << "Colour is BLUE\n";
+			break;
+		case 4:
+			cout << "Colour is YELLOW\n";
+			break;
+		case 5:
+			cout << "Colour is WHITE\n";
+			break;
+		default:
+			cout << "Nothing \n";
+	}
+
 }
 
 void control::drive(int speed, int time)
@@ -367,13 +421,20 @@ void control::turn_gyro(int turn_angle)
 void control::open_and_close(int angle)
 {
 
+int small_back = angle/3;
+int big_back = angle*2/3;
 
-_motor_dropper.set_position_setpoint(angle);
+_motor_dropper.set_position_setpoint(-24);
 _motor_dropper.run();
 _state = state_turning;
 while(_motor_dropper.running());
 
-_motor_dropper.set_position_setpoint(-angle);
+_motor_dropper.set_position_setpoint(20);
+_motor_dropper.run();
+_state = state_turning;
+while(_motor_dropper.running());
+
+_motor_dropper.set_position_setpoint(0);
 _motor_dropper.run();
 _state = state_turning;
 while(_motor_dropper.running());
@@ -460,16 +521,17 @@ bool control::initialize()
 	
 	
 	//Initialize small motor
+	_motor_dropper.set_position_setpoint(0);
 	_motor_dropper.set_pulses_per_second_setpoint(900);
 	_motor_dropper.set_regulation_mode(motor::mode_on);
 	_motor_dropper.set_run_mode(motor::run_mode_position);
-	
-	cout << "Initialization done! \n";
-	
+		
 	//Initialize sensors
 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
 	_sensor_ultrasonic.set_mode(ultrasonic_sensor::mode_dist_cm);
-	
+	_sensor_color.set_mode(color_sensor::mode_rgb);
+
+	cout << "Initialization done! \n";
 }
 
 
@@ -575,7 +637,15 @@ void printRobotStatus(control lego_robot)
 
 int main()
 {
+	int modeSelect = 0;
+	cout << "Please select a mode. \n";
+	cout << "Possible modes are: \n";
+	cout << "Drop the cilinder -> 1 \n";
+	cout << "Drive around -> 2 \n";
+	cout << "Color reading -> 3 \n";
+	cin >> modeSelect;
 
+	printf("Selected mode is %d", modeSelect);
 
 	battery_status();
 	control lego_robot;
@@ -589,30 +659,65 @@ int main()
 
 	cout << "Press the touch sensor to start \n";
 
-
-
 	while (!lego_robot.return_sensor_value(TOUCH));
-
-	int mode = 3;
 
 	cout << "Touch sensor pressed !! \n";
 
-	printRobotStatus(lego_robot);
+	
 
-	//lego_robot.turn_gyro(90);		
-	this_thread::sleep_for(chrono::milliseconds(1000));
-	lego_robot.drive_ultrasonic(1000);
-	printRobotStatus(lego_robot);
-	this_thread::sleep_for(chrono::milliseconds(500));
-	lego_robot.turn_gyro(180);
+	switch (modeSelect)
+	{
+	case 1:	
+		for(int i = 0; i <3; i++)
+		{
+			lego_robot.open_and_close(60);
+			this_thread::sleep_for(chrono::milliseconds(500));
+		}
+		break;
+	case 2:
+		this_thread::sleep_for(chrono::milliseconds(1000));
+		lego_robot.drive_ultrasonic(1000);
+		printRobotStatus(lego_robot);
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.turn_gyro(180);
+		printRobotStatus(lego_robot);
+		break;
+	case 3:
+		//for(int i = 0; i < 7; i++)
+		//{	
+			while (lego_robot.return_sensor_value(TOUCH));			
+			cout << "Press button to read the BLACK color sensor values \n";
+			while (!lego_robot.return_sensor_value(TOUCH));
+			while (lego_robot.return_sensor_value(TOUCH));
+			lego_robot.print_rgb_values();
+			cout << "Press button to read the RED color sensor values \n";
+			while (!lego_robot.return_sensor_value(TOUCH));
+			while (lego_robot.return_sensor_value(TOUCH));
+			lego_robot.print_rgb_values();
+			cout << "Press button to read the GREEN color sensor values \n";
+			while (!lego_robot.return_sensor_value(TOUCH));
+			while (lego_robot.return_sensor_value(TOUCH));
+			lego_robot.print_rgb_values();
+			cout << "Press button to read the BLUE color sensor values \n";
+			while (!lego_robot.return_sensor_value(TOUCH));
+			while (lego_robot.return_sensor_value(TOUCH));
+			lego_robot.print_rgb_values();
+			cout << "Press button to read the YELLOW color sensor values \n";
+			while (!lego_robot.return_sensor_value(TOUCH));
+			while (lego_robot.return_sensor_value(TOUCH));
+			lego_robot.print_rgb_values();
+			cout << "Press button to read the WHITE color sensor values \n";
+			while (!lego_robot.return_sensor_value(TOUCH));
+			while (lego_robot.return_sensor_value(TOUCH));
+			lego_robot.print_rgb_values();
 
-	//lego_robot.drive_ultrasonic(100);	
-	//printRobotStatus(lego_robot);	
+		//}
 
-	//lego_robot.turn_gyro(270);
-	//printRobotStatus(lego_robot);
+		break;
+	default:
+		cout << "Wrong mode selected !!";
+	}
 
-	//lego_robot.stop();
 
 
 	return 0;

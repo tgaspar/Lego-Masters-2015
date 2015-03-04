@@ -598,6 +598,7 @@ touch_sensor::touch_sensor(port_type port_) :
 const mode_type color_sensor::mode_reflect { "COL-REFLECT" };
 const mode_type color_sensor::mode_ambient { "COL-AMBIENT" };
 const mode_type color_sensor::mode_color   { "COL-COLOR"   };
+const mode_type color_sensor::mode_rgb   { "RGB-RAW"   };
 
 color_sensor::color_sensor(port_type port_) :
   sensor(port_, { ev3_color })

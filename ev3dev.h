@@ -179,6 +179,7 @@ public:
   static const mode_type mode_reflect;
   static const mode_type mode_ambient;
   static const mode_type mode_color;
+  static const mode_type mode_rgb;
 };
 
 //-----------------------------------------------------------------------------
