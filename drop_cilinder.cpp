@@ -525,7 +525,16 @@ void control::drive_ultrasonic(int drive_distance)
 	_motor_left.reset();
 	
 	_motor_left.set_run_mode(motor::run_mode_position);
-	_motor_right.set_run_mode(motor::run_mode_position);
+ 	_motor_right.set_run_mode(motor::run_mode_position);
+	
+	_motor_left.set_stop_mode(motor::stop_mode_brake);
+	_motor_right.set_stop_mode(motor::stop_mode_brake);
+	
+	_motor_left.set_ramp_up(500);
+	_motor_right.set_ramp_up(500);
+	
+	_motor_left.set_ramp_down(1000);
+	_motor_right.set_ramp_down(1000);
 	
 	_motor_left.set_regulation_mode(motor::mode_on);
 	_motor_right.set_regulation_mode(motor::mode_on);
