@@ -688,8 +688,12 @@ void control::turn_gyro(int turn_angle)
 	
 	_motor_right.set_position_setpoint(_motor_right.position() - turn_degrees);
 	
- 	_motor_left.set_pulses_per_second_setpoint(0);
- 	_motor_right.set_pulses_per_second_setpoint(0);
+ 	_motor_left.set_pulses_per_second_setpoint(60);
+ 	_motor_right.set_pulses_per_second_setpoint(60);
+	
+	
+	cout << "_motor_left.position() = " <<_motor_left.position_setpoint() << "\n";
+	cout << "_motor_right.position() = " <<_motor_right.position_setpoint() << "\n";
 	
 	_motor_left.run();
 	_motor_right.run();
@@ -721,7 +725,7 @@ void control::turn_gyro(int turn_angle)
 */
 		if (wheel_turning_speed_left < (turn_degrees - _motor_left.position()))
 		{
-			wheel_turning_speed_left += 0.1;
+			wheel_turning_speed_left += 0.5;
 		}
 		else
 		{
@@ -730,13 +734,15 @@ void control::turn_gyro(int turn_angle)
 		
 		if (wheel_turning_speed_right < (turn_degrees - _motor_right.position()))
 		{
-			wheel_turning_speed_right += 0.1;
+			wheel_turning_speed_right += 0.5;
 		}
 		else
 		{
 			wheel_turning_speed_right -= 0.5;
 		}
-
+		
+		cout << "_motor_left.position() = " << _motor_left.position() << "\n";
+		cout << "_motor_right.position() = " << _motor_right.position() << "\n";
 
 		if(wheel_turning_speed_left < 60)
 			wheel_turning_speed_left = 60;
@@ -752,7 +758,9 @@ void control::turn_gyro(int turn_angle)
 		
 		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed_left);
 		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed_right);	
-
+		
+// 		cout << "_motor_right.pulses_per_second_setpoint = " << _motor_right.pulses_per_second_setpoint() << "\n";
+// 		cout << "_motor_left.pulses_per_second_setpoint = " << _motor_left.pulses_per_second_setpoint() << "\n";		
 
 	}
 
