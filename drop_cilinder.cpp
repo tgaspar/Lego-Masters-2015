@@ -1,4 +1,6 @@
 #include "ev3dev.h"
+#include "particle.h"
+#include "ev3pfilter.h"
 #include <thread>
 #include <chrono>
 #include <iostream>
@@ -97,9 +99,9 @@ class control
 {
 public:
 	struct robot_info {
-		int X = 0;
-		int Y = 0;
-		int angle = 0;
+		int X;
+		int Y;
+		int angle;
 	};	
 
 public:
@@ -107,10 +109,10 @@ public:
 	~control();
 
 	robot_info return_robot_info();
-
+	
 	int return_sensor_value(int sensor_type);
 	int return_color_value();
-	void print_rgb_values();
+	int print_rgb_values(int print);
 	void compare_read_colors();
 
 	void drive(int speed, int time=0);
@@ -204,74 +206,81 @@ int control::return_color_value()
 	double blue = _sensor_color.value(2)/255.0;
 	int color = 0;
 
-	if((red > 0.2) && (green > 0.2) && (red > 0.2))
+	if((red > 0.5) && (green > 0.5) && (blue > 0.5))
 		color = 5;
-	else if((red < 0.03) && (green < 0.03) && (red < 0.03))
+	else if((red < 0.1) && (green < 0.1) && (blue < 0.1))
 		color = 0;
-	else if((red + green > 2*blue) && (red + green > 0.3) && (blue < 0.05))
+	else if((red + green > 2*blue) && (red + green > 1.5) && (blue < 0.1))
 		color = 4;
+	else if((red < 0.3) && (green < 0.3) && (blue < 0.3))
+		color = 3;
 	else if((red > green) && (red > blue))
 		color = 1;
 	else if((green > red) && (green > blue)) 
 		color = 2;
-	else if((blue > red) && (blue > green))
-		color = 3;
 	else
 		color = -1;
 
 	return color;
 }
 
-void control::print_rgb_values()
+int control::print_rgb_values(int print)
 {
 	double red = _sensor_color.value(0)/255.0;
 	double green = _sensor_color.value(1)/255.0;
 	double blue = _sensor_color.value(2)/255.0;
 	int color = 0;
 
-	cout << "_sensor_color.value(0) = " << red << "\n";
-	cout << "_sensor_color.value(1) = " << green << "\n";
-	cout << "_sensor_color.value(2) = " << blue << "\n";
 
-	if((red > 0.2) && (green > 0.2) && (red > 0.2))
+// 	else if((blue > red) && (blue > green))
+	if((red > 0.5) && (green > 0.5) && (blue > 0.5))
 		color = 5;
-	else if((red < 0.03) && (green < 0.03) && (red < 0.03))
+	else if((red < 0.1) && (green < 0.1) && (blue < 0.1))
 		color = 0;
-	else if((red + green > 2*blue) && (red + green > 0.3) && (blue < 0.05))
+	else if((red + green > 2*blue) && (red + green > 1.5) && (blue < 0.1))
 		color = 4;
+	else if((red < 0.3) && (green < 0.3) && (blue < 0.3))
+		color = 3;
 	else if((red > green) && (red > blue))
 		color = 1;
 	else if((green > red) && (green > blue)) 
 		color = 2;
-	else if((blue > red) && (blue > green))
-		color = 3;
 	else
 		color = -1;
 
-	switch(color)
+	if(print)
 	{
-		case 0:
-			cout << "Colour is BLACK\n";
-			break;
-		case 1:
-			cout << "Colour is RED\n";
-			break;
-		case 2:
-			cout << "Colour is GREEN\n";
-			break;
-		case 3:
-			cout << "Colour is BLUE\n";
-			break;
-		case 4:
-			cout << "Colour is YELLOW\n";
-			break;
-		case 5:
-			cout << "Colour is WHITE\n";
-			break;
-		default:
-			cout << "Nothing \n";
+		cout << "_sensor_color.value(0) = " << red << "\n";
+		cout << "_sensor_color.value(1) = " << green << "\n";
+		cout << "_sensor_color.value(2) = " << blue << "\n";
+		
+		switch(color)
+		{
+			case 0:
+				cout << "Colour is BLACK\n";
+				break;
+			case 1:
+				cout << "Colour is RED\n";
+				break;
+			case 2:
+				cout << "Colour is GREEN\n";
+				break;
+			case 3:
+				cout << "Colour is BLUE\n";
+				break;
+			case 4:
+				cout << "Colour is YELLOW\n";
+				break;
+			case 5:
+				cout << "Colour is WHITE\n";
+				break;
+			default:
+				cout << "Nothing \n";
+		}
 	}
-
+	
+	return color;
+	
 }
 void control::compare_read_colors()
 {
@@ -518,7 +527,6 @@ void control::drive_ultrasonic(int drive_distance)
 	
 // 	double wheel_length = 345.4;
 	double wheel_length = 2*M_PI*54.9;
-	cout << "wheel_length = " << wheel_length << "\n";
 	
 	turn_degrees = int(round(2*(drive_distance/wheel_length)*360.0));
 	
@@ -649,14 +657,13 @@ void control::turn_gyro(int turn_angle)
 	double wheel_turning_speed_right = 0;
 	
 	int turn_degrees = 0;
-	int turn_radius = 60*turn_angle*DEGTORAD;
+	int turn_radius = 55*turn_angle*DEGTORAD;
 	
 // 	double wheel_length = 345.4;
 	double wheel_length = 2*M_PI*54.9;
 	
 	turn_degrees = int(round(2*(turn_radius/wheel_length)*360.0));
 
-/*	
 	_motor_right.reset();
 	_motor_left.reset();
 	
@@ -668,7 +675,7 @@ void control::turn_gyro(int turn_angle)
 	
 	_motor_left.run();
 	_motor_right.run();
-*/
+/*	
 	_motor_right.reset();
 	_motor_left.reset();
 	
@@ -697,11 +704,11 @@ void control::turn_gyro(int turn_angle)
 	
 	_motor_left.run();
 	_motor_right.run();
+*/
 	
 	_state = state_turning;
 	while (_motor_left.running() || _motor_right.running())
 	{
-/*
 
 		angle_difference  = start_angle - _sensor_gyro.value();
 			
@@ -722,7 +729,7 @@ void control::turn_gyro(int turn_angle)
 				_motor_right.stop();
 				break;
 		}
-*/
+/*
 		if (wheel_turning_speed_left < (turn_degrees - _motor_left.position()))
 		{
 			wheel_turning_speed_left += 0.5;
@@ -744,6 +751,7 @@ void control::turn_gyro(int turn_angle)
 		cout << "_motor_left.position() = " << _motor_left.position() << "\n";
 		cout << "_motor_right.position() = " << _motor_right.position() << "\n";
 
+*/
 		if(wheel_turning_speed_left < 60)
 			wheel_turning_speed_left = 60;
 		
@@ -775,21 +783,24 @@ void control::open_and_close(int angle)
 int small_back = angle/3;
 int big_back = angle*2/3;
 
+
 _motor_dropper.set_position_setpoint(-24);
 _motor_dropper.run();
 _state = state_turning;
 while(_motor_dropper.running());
+this_thread::sleep_for(chrono::milliseconds(1000));
 
 _motor_dropper.set_position_setpoint(20);
 _motor_dropper.run();
 _state = state_turning;
 while(_motor_dropper.running());
+this_thread::sleep_for(chrono::milliseconds(1000));
 
-_motor_dropper.set_position_setpoint(0);
+_motor_dropper.set_position_setpoint(10);
 _motor_dropper.run();
 _state = state_turning;
 while(_motor_dropper.running());
-
+this_thread::sleep_for(chrono::milliseconds(1000));
 _state = state_idle;
 }
 
@@ -873,7 +884,7 @@ bool control::initialize()
 	
 	//Initialize small motor
 	_motor_dropper.set_position_setpoint(0);
-	_motor_dropper.set_pulses_per_second_setpoint(900);
+	_motor_dropper.set_pulses_per_second_setpoint(500);
 	_motor_dropper.set_regulation_mode(motor::mode_on);
 	_motor_dropper.set_run_mode(motor::run_mode_position);
 		
@@ -989,6 +1000,7 @@ void printRobotStatus(control lego_robot)
 int main()
 {
 	int modeSelect = 0;
+	int robotPossitionArray[3] = {0};
 	
 	battery_status();
 	cout << "Please select a mode. \n";
@@ -998,6 +1010,7 @@ int main()
 	cout << "Color reading -> 3 \n";
 	cout << "Drive around and read colors -> 4 \n";
 	cout << "Localization test -> 5 \n";
+	cout << "Localization with particle filter-> 5 \n";
 	cin >> modeSelect;
 
 	printf("Selected mode is %d", modeSelect);
@@ -1008,8 +1021,6 @@ int main()
 
 	lego_robot.initialize();
 	lego_robot.initialized();
-
-//	lego_robot.robot_info legoRobotInfo;
 
 	cout << "Press the touch sensor to start \n";
 
@@ -1028,9 +1039,9 @@ int main()
 		break;
 	case 2:
 		this_thread::sleep_for(chrono::milliseconds(1000));
-		lego_robot.drive_ultrasonic(100);
+		lego_robot.drive_ultrasonic(2500);
 		printRobotStatus(lego_robot);
-		this_thread::sleep_for(chrono::milliseconds(500));
+		this_thread::sleep_for(chrono::milliseconds(1000));
 		lego_robot.turn_gyro(180);
 		printRobotStatus(lego_robot);
 		break;
@@ -1039,47 +1050,47 @@ int main()
 		cout << "Press button to read the BLACK color sensor values \n";
 		while (!lego_robot.return_sensor_value(TOUCH));
 		while (lego_robot.return_sensor_value(TOUCH));
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		cout << "Press button to read the RED color sensor values \n";
 		while (!lego_robot.return_sensor_value(TOUCH));
 		while (lego_robot.return_sensor_value(TOUCH));
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		cout << "Press button to read the GREEN color sensor values \n";
 		while (!lego_robot.return_sensor_value(TOUCH));
 		while (lego_robot.return_sensor_value(TOUCH));
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		cout << "Press button to read the BLUE color sensor values \n";
 		while (!lego_robot.return_sensor_value(TOUCH));
 		while (lego_robot.return_sensor_value(TOUCH));
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		cout << "Press button to read the YELLOW color sensor values \n";
 		while (!lego_robot.return_sensor_value(TOUCH));
 		while (lego_robot.return_sensor_value(TOUCH));
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		cout << "Press button to read the WHITE color sensor values \n";
 		while (!lego_robot.return_sensor_value(TOUCH));
 		while (lego_robot.return_sensor_value(TOUCH));
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		break;
 	case 4:
 		this_thread::sleep_for(chrono::milliseconds(1000));
 		lego_robot.drive_ultrasonic(100);
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.turn_gyro(90);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.drive_ultrasonic(100);
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.turn_gyro(90);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.drive_ultrasonic(100);
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.turn_gyro(90);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.drive_ultrasonic(100);
-		lego_robot.print_rgb_values();
+		lego_robot.print_rgb_values(1);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.turn_gyro(90);
 		printRobotStatus(lego_robot);
@@ -1089,7 +1100,7 @@ int main()
 		this_thread::sleep_for(chrono::milliseconds(500));
 		while(matchesSum != 1)
 		{
-			readColors[numColorsRead] = lego_robot.return_color_value();
+			readColors[numColorsRead] = lego_robot.print_rgb_values(0);
 			numColorsRead += 1;
 			lego_robot.compare_read_colors();
 			cout << "numColorsRead = " << numColorsRead << "\n";
@@ -1101,7 +1112,20 @@ int main()
 			}
 		}
 		printRobotStatus(lego_robot);
-		
+		break;
+	case 6:
+		robotPossitionArray[0] = lego_robot.robot_coordinates.X;
+		robotPossitionArray[1] = lego_robot.robot_coordinates.Y;
+		robotPossitionArray[2] = lego_robot.robot_coordinates.angle;
+		for(int i = 0; i < 20; i++)
+		{
+			particleFilterMain(&robotPossitionArray[0],lego_robot.print_rgb_values(0));
+			cout << "robotPossitionArray[0] = " << robotPossitionArray[0] << "\n";
+			cout << "robotPossitionArray[1] = " << robotPossitionArray[1] << "\n";
+			cout << "robotPossitionArray[2] = " << robotPossitionArray[2] << "\n";
+			lego_robot.drive_ultrasonic(10);
+			robotPossitionArray[0] += 10;
+		}
 		break;
 	default:
 		cout << "Wrong mode selected !!";
