@@ -7,5 +7,7 @@
 #include <fstream>
 #include <cmath>
 
+int int_round(int numberToRound);
+int random(int multiplier);
 int fixAngle(int inputAngle);
-void particleFilterMain(int robotPosition[3], int readColor);
+void particleFilterMain(int robotPosition[3], int robotMovements[3], int robotMoveCommand[2], int readColor);

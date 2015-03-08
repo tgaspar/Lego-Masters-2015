@@ -117,6 +117,7 @@ public:
 
 	void drive(int speed, int time=0);
 	void drive_ultrasonic(int drive_distance);
+	void drive_speed(int transSpeed, int rotSpeed);
 	void turn_gyro(int turn_angle);
 	void open_and_close(int angle);
 
@@ -139,7 +140,8 @@ public:
 
 
 
-	robot_info robot_coordinates;
+	robot_info robot_coordinates = {0};
+	
 
 private: 
 	void correct_angle();
@@ -634,6 +636,39 @@ void control::drive_ultrasonic(int drive_distance)
 	
 	_state = state_idle;
 }
+void control::drive_speed(int transSpeed, int rotSpeed)
+{
+	int distance_difference = 0;
+	int start_distance = 0;
+	int final_difference = 0;
+	double wheel_turning_speed_left = 0;
+	double wheel_turning_speed_right = 0;
+	
+	int turn_degrees = 0;
+	
+// 	double wheel_length = 345.4;
+	double wheel_length = 2*M_PI*54.9;
+	double m_to_degrees = 360/wheel_length;
+	
+	_sensor_gyro.set_mode(gyro_sensor::mode_speed);
+
+	_motor_left.set_run_mode(motor::run_mode_forever);
+	_motor_right.set_run_mode(motor::run_mode_forever);
+	
+	_motor_left.set_regulation_mode(motor::mode_on);
+	_motor_right.set_regulation_mode(motor::mode_on);
+	
+	_motor_left.set_stop_mode(motor::stop_mode_brake);
+	_motor_right.set_stop_mode(motor::stop_mode_brake);
+	
+	_motor_left.set_pulses_per_second_setpoint((int)transSpeed*m_to_degrees*2);
+	_motor_right.set_pulses_per_second_setpoint((int)transSpeed*m_to_degrees*2);
+	
+	_motor_left.run();
+	_motor_right.run();
+	
+}
+
 
 void control::turn_gyro(int turn_angle)
 {
@@ -716,8 +751,8 @@ void control::turn_gyro(int turn_angle)
 		
 		if(wheel_turning_speed  > 800)
 			wheel_turning_speed = 800;
-		if(wheel_turning_speed < 50)
-			wheel_turning_speed = 50;
+		if(wheel_turning_speed < 60)
+			wheel_turning_speed = 60;
 		
 		_motor_left.set_pulses_per_second_setpoint(-wheel_turning_speed);
 		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed);
@@ -751,7 +786,6 @@ void control::turn_gyro(int turn_angle)
 		cout << "_motor_left.position() = " << _motor_left.position() << "\n";
 		cout << "_motor_right.position() = " << _motor_right.position() << "\n";
 
-*/
 		if(wheel_turning_speed_left < 60)
 			wheel_turning_speed_left = 60;
 		
@@ -767,6 +801,7 @@ void control::turn_gyro(int turn_angle)
 		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed_left);
 		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed_right);	
 		
+*/
 // 		cout << "_motor_right.pulses_per_second_setpoint = " << _motor_right.pulses_per_second_setpoint() << "\n";
 // 		cout << "_motor_left.pulses_per_second_setpoint = " << _motor_left.pulses_per_second_setpoint() << "\n";		
 
@@ -979,7 +1014,6 @@ void control::correct_angle()
 {
 	int corrected_angle = control::robot_coordinates.angle;
 
-	cout << "corrected_angle = " << corrected_angle << "\n";
 	while(corrected_angle > 360)
 		corrected_angle = corrected_angle - 360;
 
@@ -1001,6 +1035,10 @@ int main()
 {
 	int modeSelect = 0;
 	int robotPossitionArray[3] = {0};
+	std::clock_t start;
+	double timePassed;
+
+    start = std::clock();
 	
 	battery_status();
 	cout << "Please select a mode. \n";
@@ -1010,7 +1048,7 @@ int main()
 	cout << "Color reading -> 3 \n";
 	cout << "Drive around and read colors -> 4 \n";
 	cout << "Localization test -> 5 \n";
-	cout << "Localization with particle filter-> 5 \n";
+	cout << "Localization with particle filter-> 6 \n";
 	cin >> modeSelect;
 
 	printf("Selected mode is %d", modeSelect);
@@ -1039,11 +1077,7 @@ int main()
 		break;
 	case 2:
 		this_thread::sleep_for(chrono::milliseconds(1000));
-		lego_robot.drive_ultrasonic(2500);
-		printRobotStatus(lego_robot);
-		this_thread::sleep_for(chrono::milliseconds(1000));
-		lego_robot.turn_gyro(180);
-		printRobotStatus(lego_robot);
+		lego_robot.drive_speed(100,0);
 		break;
 	case 3:	
 		while (lego_robot.return_sensor_value(TOUCH));			
@@ -1114,24 +1148,55 @@ int main()
 		printRobotStatus(lego_robot);
 		break;
 	case 6:
+	{
 		robotPossitionArray[0] = lego_robot.robot_coordinates.X;
 		robotPossitionArray[1] = lego_robot.robot_coordinates.Y;
 		robotPossitionArray[2] = lego_robot.robot_coordinates.angle;
-		for(int i = 0; i < 20; i++)
+		int robotMoves[3] = {0};
+		int robotMoveCommands[2] = {40, 0};
+		int traveledDistance = 0;
+		
+// 		for(int i = 0; i < 30; i++)
+		while (!lego_robot.return_sensor_value(TOUCH))
 		{
-			particleFilterMain(&robotPossitionArray[0],lego_robot.print_rgb_values(0));
-			cout << "robotPossitionArray[0] = " << robotPossitionArray[0] << "\n";
-			cout << "robotPossitionArray[1] = " << robotPossitionArray[1] << "\n";
-			cout << "robotPossitionArray[2] = " << robotPossitionArray[2] << "\n";
-			lego_robot.drive_ultrasonic(10);
-			robotPossitionArray[0] += 10;
+			
+			//while (!lego_robot.return_sensor_value(TOUCH));
+			//while (lego_robot.return_sensor_value(TOUCH));
+			
+			robotMoveCommands[0] = 70;
+			robotMoveCommands[1] = 0;
+			
+			lego_robot.drive_speed(robotMoveCommands[0],0);
+			/*			
+			lego_robot.drive_ultrasonic(robotMoveCommands[0]);
+			lego_robot.turn_gyro(robotMoveCommands[1]);
+			*/		
+			robotMoveCommands[0] = (int)robotMoveCommands[0]*1.0*timePassed;
+			robotMoves[2] = robotMoveCommands[1];
+			robotMoves[0] = int_round(robotMoveCommands[0]*cos(robotMoveCommands[1]*1.0));
+			robotMoves[1] = int_round(robotMoveCommands[0]*sin(robotMoveCommands[1]*1.0));
+			
+			particleFilterMain(&robotPossitionArray[0], &robotMoves[0], &robotMoveCommands[0], lego_robot.print_rgb_values(1));
+					
+			cout << "robotPossitionArray[0] = "<< robotPossitionArray[0] << "\n";
+			cout << "robotPossitionArray[1] = "<< robotPossitionArray[1] << "\n";
+			cout << "robotPossitionArray[2] = "<< robotPossitionArray[2] << "\n";
+			
+			
+			traveledDistance  += 2*robotMoveCommands[0];
+			
+			timePassed = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
+			start = std::clock();
+// 			robotPossitionArray[0] += 10;
 		}
+		cout << "traveledDistance[0] = " << traveledDistance << "\n";
 		break;
+	}
 	default:
 		cout << "Wrong mode selected !!";
 	}
-
-
+	
+	
 
 	return 0;
 }
