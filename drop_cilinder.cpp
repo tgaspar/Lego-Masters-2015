@@ -1,5 +1,5 @@
 #include "ev3dev.h"
-#include "particle.h"
+// #include "particle.h"
 #include "ev3pfilter.h"
 #include <thread>
 #include <chrono>
@@ -34,7 +34,7 @@ using namespace ev3dev;
   
 ofstream sensorlog;
 
-
+ 
 //***************************************************************
 // MAPS VARIABLES
 //***************************************************************
@@ -119,6 +119,7 @@ public:
 	void drive_ultrasonic(int drive_distance);
 	void drive_speed(int transSpeed, int rotSpeed);
 	void turn_gyro(int turn_angle);
+	int rotate_to_wall();
 	void open_and_close(int angle);
 
 	void stop();
@@ -708,6 +709,9 @@ void control::turn_gyro(int turn_angle)
 	_motor_left.set_regulation_mode(motor::mode_on);
 	_motor_right.set_regulation_mode(motor::mode_on);
 	
+	_motor_left.set_stop_mode(motor::stop_mode_brake);
+	_motor_right.set_stop_mode(motor::stop_mode_brake);
+	
 	_motor_left.run();
 	_motor_right.run();
 /*	
@@ -761,7 +765,10 @@ void control::turn_gyro(int turn_angle)
 		if(angle_difference > turn_angle)
 		{
 				_motor_left.stop();
-				_motor_right.stop();
+				_motor_right.stop();	
+				int distance = _sensor_ultrasonic.value();
+
+		
 				break;
 		}
 /*
@@ -809,6 +816,164 @@ void control::turn_gyro(int turn_angle)
 
 	robot_coordinates.angle = robot_coordinates.angle + turn_angle;
 	control::correct_angle();
+	_state = state_idle;
+}
+
+int control::rotate_to_wall()
+{
+	
+	if (_state != state_idle)
+		stop();
+
+// 	
+// 	_sensor_gyro.set_mode(gyro_sensor::mode_calibration);
+// 	this_thread::sleep_for(chrono::milliseconds(1000));
+	
+	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
+	_sensor_gyro.set_mode(gyro_sensor::mode_speed);
+	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
+	
+	int turn_angle = 360;
+	int angle_difference = 0;
+	int start_angle = _sensor_gyro.value();
+	
+	int distance = _sensor_ultrasonic.value();
+
+	int minimumDistance = 2200;
+	int angleAtMinimumDistance = 0;
+	
+	double wheel_turning_speed_left = 0;
+	double wheel_turning_speed_right = 0;
+	
+// 	int turn_degrees = 0;
+// 	int turn_radius = 55*turn_angle*DEGTORAD;
+// 	
+// 	double wheel_length = 2*M_PI*54.9;
+// 	
+// 	turn_degrees = int(round(2*(turn_radius/wheel_length)*360.0));
+
+	_motor_right.reset();
+	_motor_left.reset();
+	
+	_motor_left.set_run_mode(motor::run_mode_forever);
+	_motor_right.set_run_mode(motor::run_mode_forever);
+	
+	_motor_left.set_regulation_mode(motor::mode_on);
+	_motor_right.set_regulation_mode(motor::mode_on);
+	
+	_motor_left.set_stop_mode(motor::stop_mode_brake);
+	_motor_right.set_stop_mode(motor::stop_mode_brake);
+	
+	_motor_left.run();
+	_motor_right.run();
+
+	
+	_state = state_turning;
+	while (_motor_left.running() || _motor_right.running())
+	{
+
+		angle_difference  = start_angle - _sensor_gyro.value();
+			
+		int wheel_turning_speed = int(turn_angle - angle_difference)*5;
+		
+		if(wheel_turning_speed  > 400)
+			wheel_turning_speed = 400;
+		if(wheel_turning_speed < 60)
+			wheel_turning_speed = 60;
+		
+		_motor_left.set_pulses_per_second_setpoint(-wheel_turning_speed);
+		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed);
+
+		if(_sensor_ultrasonic.value() < minimumDistance)
+		{
+			minimumDistance = _sensor_ultrasonic.value();
+			angleAtMinimumDistance = _sensor_gyro.value();
+		}
+		
+		
+		if(angle_difference > turn_angle)
+		{
+				_motor_left.stop();
+				_motor_right.stop();
+				break;
+		}
+
+	}
+	
+	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
+	_sensor_gyro.set_mode(gyro_sensor::mode_speed);
+	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
+	
+	start_angle = _sensor_gyro.value();
+	turn_angle = angleAtMinimumDistance;
+	
+	
+	if(turn_angle < 360)
+		turn_angle += 180;
+	if(turn_angle > 360)
+		turn_angle -= 360;
+	if(turn_angle > 180)
+		turn_angle = -(380 - turn_angle);
+	
+	
+	cout << "start_angle = " << start_angle << "\n";
+	cout << "turn_angle = " << turn_angle << "\n";
+	cout << "angleAtMinimumDistance = " << angleAtMinimumDistance << "\n";
+	cout << "minimumDistance = " << minimumDistance << "\n";
+		
+	_motor_left.set_stop_mode(motor::stop_mode_brake);
+	_motor_right.set_stop_mode(motor::stop_mode_brake);
+	
+	_motor_left.run();
+	_motor_right.run();
+
+	
+	while (_motor_left.running() || _motor_right.running())
+	{
+
+		angle_difference  = start_angle - _sensor_gyro.value();
+			
+		int wheel_turning_speed = 0;
+		
+		wheel_turning_speed = int(turn_angle - angle_difference)*5;
+		
+		if((wheel_turning_speed  > 200) && (wheel_turning_speed > 0))
+			wheel_turning_speed = 200;
+		if((wheel_turning_speed < 60) && (wheel_turning_speed > 0))
+			wheel_turning_speed = 60;
+		
+		if((wheel_turning_speed  < -200) && (wheel_turning_speed < 0))
+			wheel_turning_speed = -200;
+		if((wheel_turning_speed > -60) && (wheel_turning_speed < 0))
+			wheel_turning_speed = -60;
+		
+// 		cout << "_sensor_ultrasonic.value() = " << _sensor_ultrasonic.value() << "\n";
+		if(_sensor_ultrasonic.value() < minimumDistance+5)
+		{
+				_motor_left.stop();
+				_motor_right.stop();
+				break;	
+		}
+		
+		_motor_left.set_pulses_per_second_setpoint(-wheel_turning_speed);
+		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed);
+
+		
+		if((angle_difference > turn_angle) && (turn_angle > 0))
+		{
+				_motor_left.stop();
+				_motor_right.stop();
+				break;
+		}
+		if((angle_difference < turn_angle) && (turn_angle < 0))
+		{
+				_motor_left.stop();
+				_motor_right.stop();
+				break;
+		}
+
+	}
+	return minimumDistance;
 	_state = state_idle;
 }
 
@@ -1046,12 +1211,12 @@ int main()
 	cout << "Drop the cilinder -> 1 \n";
 	cout << "Drive around -> 2 \n";
 	cout << "Color reading -> 3 \n";
-	cout << "Drive around and read colors -> 4 \n";
+	cout << "Rotate towards the closest wall -> 4 \n";
 	cout << "Localization test -> 5 \n";
 	cout << "Localization with particle filter-> 6 \n";
 	cin >> modeSelect;
 
-	printf("Selected mode is %d", modeSelect);
+	printf("Selected mode is %d \n", modeSelect);
 
 	control lego_robot;
 
@@ -1072,12 +1237,14 @@ int main()
 		for(int i = 0; i <3; i++)
 		{
 			lego_robot.open_and_close(60);
-			this_thread::sleep_for(chrono::milliseconds(500));
+			this_thread::sleep_for(chrono::milliseconds(100));
 		}
 		break;
 	case 2:
-		this_thread::sleep_for(chrono::milliseconds(1000));
-		lego_robot.drive_speed(100,0);
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.drive_ultrasonic(1000);
+		this_thread::sleep_for(chrono::milliseconds(500));
+		lego_robot.turn_gyro(180);
 		break;
 	case 3:	
 		while (lego_robot.return_sensor_value(TOUCH));			
@@ -1107,27 +1274,9 @@ int main()
 		lego_robot.print_rgb_values(1);
 		break;
 	case 4:
-		this_thread::sleep_for(chrono::milliseconds(1000));
-		lego_robot.drive_ultrasonic(100);
-		lego_robot.print_rgb_values(1);
+		lego_robot.drive_ultrasonic(lego_robot.rotate_to_wall()*2);
 		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.turn_gyro(90);
-		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.drive_ultrasonic(100);
-		lego_robot.print_rgb_values(1);
-		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.turn_gyro(90);
-		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.drive_ultrasonic(100);
-		lego_robot.print_rgb_values(1);
-		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.turn_gyro(90);
-		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.drive_ultrasonic(100);
-		lego_robot.print_rgb_values(1);
-		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.turn_gyro(90);
-		printRobotStatus(lego_robot);
+		lego_robot.turn_gyro(180);
 		break;
 	case 5:
 		while (lego_robot.return_sensor_value(TOUCH));

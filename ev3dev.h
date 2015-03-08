@@ -206,6 +206,7 @@ public:
   static const mode_type mode_angle;
   static const mode_type mode_speed;
   static const mode_type mode_angle_and_speed;
+  static const mode_type mode_calibration;
 };
 
 //-----------------------------------------------------------------------------

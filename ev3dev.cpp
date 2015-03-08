@@ -624,6 +624,7 @@ ultrasonic_sensor::ultrasonic_sensor(port_type port_) :
 const mode_type gyro_sensor::mode_angle           { "GYRO-ANG"  };
 const mode_type gyro_sensor::mode_speed           { "GYRO-RATE" };
 const mode_type gyro_sensor::mode_angle_and_speed { "GYRO-G&A"  };
+const mode_type gyro_sensor::mode_calibration { "GYRO-CAL"  };
 
 gyro_sensor::gyro_sensor(port_type port_) :
   sensor(port_, { ev3_gyro })
