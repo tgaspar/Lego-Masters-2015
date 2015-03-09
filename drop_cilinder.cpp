@@ -494,7 +494,7 @@ public:
 	void turn_gyro(int turn_angle);
 	int rotate_to_point(double X, double Y, double angle);
 	int rotate_to_wall();
-	void open_and_close(int angle);
+	void open_and_close(int pushSpeed);
 
 	void stop();
 	void reset();
@@ -844,8 +844,8 @@ void control::compare_read_colors()
 						orientationMultiplier = -1;
 						break;
 				}
-			robot_coordinates.X = robot_coordinates.X*100;
-			robot_coordinates.Y = robot_coordinates.Y*100;
+			robot_coordinates.X = robot_coordinates.X*100 - round(cos(robot_coordinates.angle));
+			robot_coordinates.Y = robot_coordinates.Y*100 - round(sin(robot_coordinates.angle));
 			break;
 			}
 		}
@@ -1369,7 +1369,7 @@ int control::rotate_to_wall()
 	_motor_left.run();
 	_motor_right.run();
 
-	control::turn_gyro(-turn_angle);
+	control::turn_gyro(turn_angle);
 	/*
 	while (_motor_left.running() || _motor_right.running())
 	{
@@ -1422,11 +1422,11 @@ int control::rotate_to_wall()
 	_state = state_idle;
 }
 
-void control::open_and_close(int angle)
+void control::open_and_close(int pushSpeed)
 {
 
-int small_back = angle/3;
-int big_back = angle*2/3;
+// int small_back = angle/3;
+// int big_back = angle*2/3;
 
 
 _motor_dropper.set_position_setpoint(-40);
@@ -1435,7 +1435,7 @@ _state = state_turning;
 while(_motor_dropper.running());
 this_thread::sleep_for(chrono::milliseconds(100));
 
-_motor_dropper.set_pulses_per_second_setpoint(100);
+_motor_dropper.set_pulses_per_second_setpoint(pushSpeed);
 _motor_dropper.set_position_setpoint(20);
 _motor_dropper.run();
 _state = state_turning;
@@ -1681,13 +1681,17 @@ int main()
 
 	switch (modeSelect)
 	{
-	case 1:	
+	case 1:
+	{	int smalMotorSpeed = 0;
+		cout << "Please type the motor speed in pulses per second \n";
+		cin >> smalMotorSpeed;
 		for(int i = 0; i <3; i++)
 		{
-			lego_robot.open_and_close(60);
+			lego_robot.open_and_close(smalMotorSpeed);
 			this_thread::sleep_for(chrono::milliseconds(100));
 		}
 		break;
+	}
 	case 2:
 		this_thread::sleep_for(chrono::milliseconds(500));
 // 		lego_robot.drive_ultrasonic(1000);
@@ -1726,6 +1730,17 @@ int main()
 		lego_robot.drive_ultrasonic(lego_robot.rotate_to_wall()*2);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.turn_gyro(180);
+		cout << "Frontal distance = " << lego_robot.return_sensor_value(ULTRASOUND) << "\n";
+		if(lego_robot.return_sensor_value(ULTRASOUND) < 600)
+		{
+			lego_robot.turn_gyro(-90);
+			if(lego_robot.return_sensor_value(ULTRASOUND) < 600)
+			{
+				lego_robot.turn_gyro(180);
+			}
+		}
+		cout << "Frontal distance = " << lego_robot.return_sensor_value(ULTRASOUND) << "\n";
+		
 		break;
 	case 5:
 		while(matchesSum != 1)
@@ -1843,7 +1858,7 @@ int main()
 				break;
 		}
 		lego_robot.turn_gyro(-(lego_robot.robot_coordinates.angle - 90));
-		lego_robot.open_and_close(20);
+		lego_robot.open_and_close(80);
 	break;
 	}
 	default:
