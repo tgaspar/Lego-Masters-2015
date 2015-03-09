@@ -1,4 +1,5 @@
 #include "ev3dev.h"
+#include "stlastar.h"
 // #include "particle.h"
 #include "ev3pfilter.h"
 #include <thread>
@@ -34,23 +35,395 @@ using namespace ev3dev;
   
 ofstream sensorlog;
 
+//=============================================================================//
+// A STAR
+//=============================================================================//
+
+ // Global data
+
+// The world map
+
+const int MAP_WIDTH = 18;
+const int MAP_HEIGHT = 10;
+
+int obstacle_coordinates[3][2] = {0};
+
+int world_map[ MAP_WIDTH * MAP_HEIGHT ] = {1};
+/*
+{
+
+    // 0001020304050607080910111213141516171819
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 00
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 01
+	1,1,1,9,9,9,9,9,9,9,9,9,9,9,1,1,1,1,1,1,   // 02
+	1,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 03
+	1,1,1,9,1,1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,   // 04
+	1,1,1,9,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 05
+	1,1,1,9,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 06
+	1,1,1,9,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 07
+	1,1,1,9,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 08
+	1,1,1,9,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 09
+	1,1,1,9,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 10
+	1,1,1,9,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 11
+	1,1,1,9,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 12
+	1,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 13
+	1,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 14
+	1,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 15
+	1,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 16
+	1,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 17
+	1,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 18
+	1,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   // 19
+
+};
+*/
+// Control variables
+int routeCalculated = 0;
+int numberOfSteps = 0;
+
+// Route array
+int routeToGoal[2][200] = {0};
+int routeX[200] = {0};
+int routeY[200] = {0};
+// map helper functions
+
+int GetMap( int x, int y )
+{
+	if( x < 0 ||
+	    x >= MAP_WIDTH ||
+		 y < 0 ||
+		 y >= MAP_HEIGHT
+	  )
+	{
+		return 9;
+	}
+
+	return world_map[(y*MAP_WIDTH)+x];
+}
+
+
+
+// Definitions
+class MapSearchNode
+{
+public:
+	int x;	 // the (x,y) positions of the node
+	int y;	
+	
+	MapSearchNode() { x = y = 0; }
+	MapSearchNode( int px, int py ) { x=px; y=py; }
+
+	float GoalDistanceEstimate( MapSearchNode &nodeGoal );
+	bool IsGoal( MapSearchNode &nodeGoal );
+	bool GetSuccessors( AStarSearch<MapSearchNode> *astarsearch, MapSearchNode *parent_node );
+	float GetCost( MapSearchNode &successor );
+	bool IsSameState( MapSearchNode &rhs );
+
+	void PrintNodeInfo(); 
+       
+        int OutputXnodes();
+        int OutputYnodes();
+
+};
+
+bool MapSearchNode::IsSameState( MapSearchNode &rhs )
+{
+
+	// same state in a maze search is simply when (x,y) are the same
+	if( (x == rhs.x) &&
+		(y == rhs.y) )
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+
+}
+
+void MapSearchNode::PrintNodeInfo()
+{
+	char str[100];
+	sprintf( str, "Node position : (%d,%d)\n", x,y );
+
+	cout << str;
+}
+int MapSearchNode::OutputXnodes()
+{
+    return x;
+}
+int MapSearchNode::OutputYnodes()
+{
+    return y;
+}
+
+// Here's the heuristic function that estimates the distance from a Node
+// to the Goal. 
+
+float MapSearchNode::GoalDistanceEstimate( MapSearchNode &nodeGoal )
+{
+	return abs(x - nodeGoal.x) + abs(y - nodeGoal.y);
+}
+
+bool MapSearchNode::IsGoal( MapSearchNode &nodeGoal )
+{
+
+	if( (x == nodeGoal.x) &&
+		(y == nodeGoal.y) )
+	{
+		return true;
+	}
+
+	return false;
+}
+
+// This generates the successors to the given Node. It uses a helper function called
+// AddSuccessor to give the successors to the AStar class. The A* specific initialisation
+// is done for each node internally, so here you just set the state information that
+// is specific to the application
+bool MapSearchNode::GetSuccessors( AStarSearch<MapSearchNode> *astarsearch, MapSearchNode *parent_node )
+{
+
+	int parent_x = -1; 
+	int parent_y = -1; 
+
+	if( parent_node )
+	{
+		parent_x = parent_node->x;
+		parent_y = parent_node->y;
+	}
+	
+
+	MapSearchNode NewNode;
+
+	// push each possible move except allowing the search to go backwards
+
+	if( (GetMap( x-1, y ) < 9) 
+		&& !((parent_x == x-1) && (parent_y == y))
+	  ) 
+	{
+		NewNode = MapSearchNode( x-1, y );
+		astarsearch->AddSuccessor( NewNode );
+	}	
+
+	if( (GetMap( x, y-1 ) < 9) 
+		&& !((parent_x == x) && (parent_y == y-1))
+	  ) 
+	{
+		NewNode = MapSearchNode( x, y-1 );
+		astarsearch->AddSuccessor( NewNode );
+	}	
+
+	if( (GetMap( x+1, y ) < 9)
+		&& !((parent_x == x+1) && (parent_y == y))
+	  ) 
+	{
+		NewNode = MapSearchNode( x+1, y );
+		astarsearch->AddSuccessor( NewNode );
+	}	
+
+		
+	if( (GetMap( x, y+1 ) < 9) 
+		&& !((parent_x == x) && (parent_y == y+1))
+		)
+	{
+		NewNode = MapSearchNode( x, y+1 );
+		astarsearch->AddSuccessor( NewNode );
+	}	
+
+	return true;
+}
+
+// given this node, what does it cost to move to successor. In the case
+// of our map the answer is the map terrain value at this node since that is 
+// conceptually where we're moving
+
+float MapSearchNode::GetCost( MapSearchNode &successor )
+{
+	return (float) GetMap( x, y );
+
+}
+
+void calculateRoute(int xr, int yr, int endx, int endy, int ovireX, int ovireY)
+{
+int tempObst[2] = {0};
+
+for (int i = 0; i < MAP_WIDTH * MAP_HEIGHT; i++)
+{
+world_map[i] = 1;
+}
+
+for (int u = 0; u < 2; u++)
+{
+  tempObst[0] = obstacle_coordinates[u][0];
+  tempObst[1] = obstacle_coordinates[u][1];
+  world_map[tempObst[0] + (tempObst[1]*MAP_WIDTH)] = 9;
+  world_map[tempObst[0] - 1 + (tempObst[1]*MAP_WIDTH)] = 9;
+  world_map[tempObst[0] + 1 + (tempObst[1]*MAP_WIDTH)] = 9;
+  world_map[tempObst[0] + ((tempObst[1] - 1)*MAP_WIDTH)] = 9;
+  world_map[tempObst[0] + ((tempObst[1] + 1)*MAP_WIDTH)] = 9;
+    world_map[tempObst[0] + ((tempObst[1] - 2)*MAP_WIDTH)] = 9;
+  world_map[tempObst[0] + ((tempObst[1] + 2)*MAP_WIDTH)] = 9;
+
+
+}
+
+
+	// Create an instance of the search class...
+
+	AStarSearch<MapSearchNode> astarsearch;
+
+	unsigned int SearchCount = 0;
+
+	const unsigned int NumSearches = 1;
+
+	while(SearchCount < NumSearches)
+	{
+
+		// Create a start state
+		MapSearchNode nodeStart;
+		nodeStart.x = xr;//rand()%MAP_WIDTH;
+		nodeStart.y = yr;//rand()%MAP_HEIGHT;
+
+		// Define the goal state
+		MapSearchNode nodeEnd;
+		nodeEnd.x = endx;
+		nodeEnd.y = endy;//rand()%MAP_HEIGHT;
+
+		
+		// Set Start and goal states
+
+		astarsearch.SetStartAndGoalStates( nodeStart, nodeEnd );
+
+		unsigned int SearchState;
+		unsigned int SearchSteps = 0;
+
+		do
+		{
+			SearchState = astarsearch.SearchStep();
+
+			SearchSteps++;
+
+	#if DEBUG_LISTS
+
+			cout << "Steps:" << SearchSteps << "\n";
+
+			int len = 0;
+
+			cout << "Open:\n";
+			MapSearchNode *p = astarsearch.GetOpenListStart();
+			while( p )
+			{
+				len++;
+
+	#if !DEBUG_LIST_LENGTHS_ONLY
+				((MapSearchNode *)p)->PrintNodeInfo();
+	#endif
+				p = astarsearch.GetOpenListNext();
+
+			}
+
+			cout << "Open list has " << len << " nodes\n";
+
+			len = 0;
+
+			cout << "Closed:\n";
+			p = astarsearch.GetClosedListStart();
+			while( p )
+			{
+				len++;
+	#if !DEBUG_LIST_LENGTHS_ONLY			
+				p->PrintNodeInfo();
+	#endif			
+				p = astarsearch.GetClosedListNext();
+			}
+
+			cout << "Closed list has " << len << " nodes\n";
+	#endif
+
+		}
+		while( SearchState == AStarSearch<MapSearchNode>::SEARCH_STATE_SEARCHING );
+
+		if( SearchState == AStarSearch<MapSearchNode>::SEARCH_STATE_SUCCEEDED )
+		{
+			cout << "Search found goal state\n";
+
+				MapSearchNode *node = astarsearch.GetSolutionStart();
+
+	#if DISPLAY_SOLUTION
+				cout << "Displaying solution\n";
+	#endif
+				int steps = 0;
+
+				node->PrintNodeInfo();
+				for( ;; )
+				{
+					node = astarsearch.GetSolutionNext();
+
+					if( !node )
+					{
+						break;
+					}
+
+					node->PrintNodeInfo();
+                                        routeX[steps] = node->OutputXnodes();
+                                        routeY[steps] = node->OutputYnodes();
+					steps ++;
+				
+				};
+                                numberOfSteps = steps;
+                                
+				cout << "Solution steps " << steps << endl;
+				// Once you're done with the solution you can free the nodes up
+				astarsearch.FreeSolutionNodes();
+
+	
+		}
+		else if( SearchState == AStarSearch<MapSearchNode>::SEARCH_STATE_FAILED ) 
+		{
+			cout << "Search terminated. Did not find goal state\n";
+		
+		}
+
+		// Display the number of loops the search went through
+		cout << "SearchSteps : " << SearchSteps << "\n";
+
+                for(int i = 0; i<numberOfSteps; i++)
+                {
+                cout << "X : " << routeX[i] << "\t Y : " << routeY[i] << "\n";
+                }
+
+
+
+		SearchCount ++;
+
+		astarsearch.EnsureMemoryFreed();
+	}
+        routeCalculated = 1;
+
+}
+
+//=============================================================================//
+// END OF A STAR
+//=============================================================================//
+
  
 //***************************************************************
 // MAPS VARIABLES
-//***************************************************************
+// //***************************************************************
 int bigColorMap[SIZEY*SIZEX] = 
 {
 //X->	00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17// Y
 	4, 1, 3, 4, 3, 2, 4, 3, 1, 5, 1, 3, 5, 2, 1, 4, 1, 3,// 00
-	0, 3, 1, 1, 3, 0, 2, 2, 2, 0, 2, 2, 5, 2, 2, 2, 5, 1,// 01
+	0, 2, 1, 1, 3, 0, 2, 2, 2, 0, 2, 2, 5, 2, 2, 2, 5, 1,// 01
 	4, 1, 3, 0, 3, 1, 3, 5, 4, 2, 2, 3, 2, 2, 2, 0, 1, 0,// 02
 	1, 2, 2, 3, 5, 3, 1, 3, 2, 0, 3, 5, 1, 0, 5, 4, 0, 2,// 03
 	4, 0, 4, 3, 2, 3, 2, 5, 4, 0, 5, 3, 2, 4, 4, 0, 0, 4,// 04
 	0, 3, 1, 3, 5, 2, 0, 1, 4, 5, 4, 4, 4, 3, 3, 3, 2, 2,// 05
-	1, 3, 1, 5, 5, 4, 2, 3, 5, 1, 0, 3, 1, 5, 1, 3, 2, 0,// 06
+	1, 2, 1, 5, 5, 4, 2, 3, 5, 1, 0, 3, 1, 5, 1, 3, 2, 0,// 06
 	5, 4, 2, 0, 5, 3, 3, 1, 2, 4, 2, 3, 5, 4, 1, 1, 0, 4,// 07
-	5, 3, 2, 0, 2, 2, 3, 4, 2, 0, 1, 1, 2, 4, 4, 0, 5, 1,// 08
-	1, 2, 5, 1, 5, 0, 5, 0, 4, 4, 1, 4, 4, 0, 2, 2, 0, 2 // 09
+	5, 3, 2, 5, 2, 2, 3, 4, 2, 0, 1, 1, 2, 4, 4, 0, 5, 1,// 08
+	1, 2, 5, 1, 5, 0, 5, 0, 4, 4, 1, 4, 4, 5, 2, 2, 0, 2 // 09
 };
 
 int numColorsRead = 0;
@@ -119,6 +492,7 @@ public:
 	void drive_ultrasonic(int drive_distance);
 	void drive_speed(int transSpeed, int rotSpeed);
 	void turn_gyro(int turn_angle);
+	int rotate_to_point(double X, double Y, double angle);
 	int rotate_to_wall();
 	void open_and_close(int angle);
 
@@ -236,11 +610,11 @@ int control::print_rgb_values(int print)
 
 
 // 	else if((blue > red) && (blue > green))
-	if((red > 0.5) && (green > 0.5) && (blue > 0.5))
+	if((red > 0.4) && (green > 0.4) && (blue > 0.4))
 		color = 5;
-	else if((red < 0.1) && (green < 0.1) && (blue < 0.1))
+	else if((red < 0.12) && (green < 0.12) && (blue < 0.12))
 		color = 0;
-	else if((red + green > 2*blue) && (red + green > 1.5) && (blue < 0.1))
+	else if((red + green > 2*blue) && (red + green > 1.2) && (blue < 0.1))
 		color = 4;
 	else if((red < 0.3) && (green < 0.3) && (blue < 0.3))
 		color = 3;
@@ -371,7 +745,7 @@ void control::compare_read_colors()
 		cout << "The requirements for localization are met !! \n";
 		for (int i = 0; i < 4; i++)
 		{
-			cout << "matchesArray[" << i << "]" << matchesArray[i] << "\n\n";
+			cout << "matchesArray[" << i << "] = " << matchesArray[i] << "\n\n";
 			if(matchesArray[i] == 1)
 			{
 				switch(i)
@@ -437,7 +811,7 @@ void control::compare_read_colors()
 								if(colorsSum == 0)
 								{
 									robot_coordinates.X = x;
-									robot_coordinates.Y = y + numColorsRead;
+									robot_coordinates.Y = y + numColorsRead - 1;
 									robot_coordinates.angle = 90;
 								}
 							}
@@ -682,6 +1056,8 @@ void control::turn_gyro(int turn_angle)
 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
 	_sensor_gyro.set_mode(gyro_sensor::mode_speed);
 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
+	
+	turn_angle = -turn_angle;
 
 	int angle_difference = 0;
 	int start_angle = _sensor_gyro.value();
@@ -746,6 +1122,8 @@ void control::turn_gyro(int turn_angle)
 */
 	
 	_state = state_turning;
+	
+// 	cout << "start_angle = " << start_angle << "\n";
 	while (_motor_left.running() || _motor_right.running())
 	{
 
@@ -753,24 +1131,45 @@ void control::turn_gyro(int turn_angle)
 			
 		int wheel_turning_speed = int(turn_angle - angle_difference)*5;
 		
-		if(wheel_turning_speed  > 800)
+		if(wheel_turning_speed  > 800 && (wheel_turning_speed > 0))
 			wheel_turning_speed = 800;
-		if(wheel_turning_speed < 60)
+		if(wheel_turning_speed < 60 && (wheel_turning_speed > 0))
 			wheel_turning_speed = 60;
 		
-		_motor_left.set_pulses_per_second_setpoint(-wheel_turning_speed);
-		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed);
-
+		if((wheel_turning_speed  < -800)  && (wheel_turning_speed < 0))
+			wheel_turning_speed = -800;
+		if((wheel_turning_speed > -60) && (wheel_turning_speed < 0))
+			wheel_turning_speed = -60;
 		
-		if(angle_difference > turn_angle)
+// 		cout << "wheel_turning_speed = " << wheel_turning_speed << "\n";
+// 		cout << "angle_difference = " << angle_difference << "\n";
+// 		cout << "_sensor_gyro.value() = " << _sensor_gyro.value() << "\n";
+// 		
+		
+		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed);
+		_motor_right.set_pulses_per_second_setpoint(-wheel_turning_speed);
+		
+		if((angle_difference > turn_angle) && (turn_angle > 0))
 		{
 				_motor_left.stop();
-				_motor_right.stop();	
-				int distance = _sensor_ultrasonic.value();
-
-		
+				_motor_right.stop();
 				break;
 		}
+		if((angle_difference < turn_angle) && (turn_angle < 0))
+		{
+				_motor_left.stop();
+				_motor_right.stop();
+				break;
+		}
+		
+		if(_sensor_touch.value() || (wheel_turning_speed == 0))
+		{
+			_motor_left.stop();
+			_motor_right.stop();
+			break;
+		}
+		
+
 /*
 		if (wheel_turning_speed_left < (turn_degrees - _motor_left.position()))
 		{
@@ -813,27 +1212,63 @@ void control::turn_gyro(int turn_angle)
 // 		cout << "_motor_left.pulses_per_second_setpoint = " << _motor_left.pulses_per_second_setpoint() << "\n";		
 
 	}
-
+	turn_angle = -turn_angle;
 	robot_coordinates.angle = robot_coordinates.angle + turn_angle;
 	control::correct_angle();
 	_state = state_idle;
 }
+int control::rotate_to_point(double X, double Y, double angle)
+{
+	int turn_angle = 0;
+	
 
+	cout << "************************************\n";
+	cout << "robot_coordinates.X = " << robot_coordinates.X << "\n";
+	cout << "robot_coordinates.Y = " << robot_coordinates.Y << "\n";
+	cout << "robot_coordinates.angle = " << robot_coordinates.angle << "\n\n";
+	
+	cout << "X = " << X << "; Y = " << Y << "\n";
+	
+
+	turn_angle = round(atan2((Y - robot_coordinates.Y),(X - robot_coordinates.X))*RADTODEG);
+	
+	turn_angle = -(control::robot_coordinates.angle - turn_angle);
+	
+	cout << "turn_angle_before = " << turn_angle << "\n";
+	
+	if((turn_angle < 0))
+	{
+		if((turn_angle <= -360))
+			turn_angle += 360;	
+		
+		if(turn_angle < -180)
+			turn_angle = (360 + turn_angle);
+	}
+	if(turn_angle > 0)
+	{
+		if((turn_angle >= 360))
+			turn_angle -= 360;
+		
+		if(turn_angle > 180)
+			turn_angle = -(360 - turn_angle);
+		
+	}
+	cout << "turn_angle_after = " << turn_angle << "\n";
+	
+	control::turn_gyro(turn_angle);
+	return 1;
+}
 int control::rotate_to_wall()
 {
 	
 	if (_state != state_idle)
 		stop();
 
-// 	
-// 	_sensor_gyro.set_mode(gyro_sensor::mode_calibration);
-// 	this_thread::sleep_for(chrono::milliseconds(1000));
-	
 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
 	_sensor_gyro.set_mode(gyro_sensor::mode_speed);
 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
 	
-	int turn_angle = 360;
+	int turn_angle = 360 - 5;
 	int angle_difference = 0;
 	int start_angle = _sensor_gyro.value();
 	
@@ -845,12 +1280,6 @@ int control::rotate_to_wall()
 	double wheel_turning_speed_left = 0;
 	double wheel_turning_speed_right = 0;
 	
-// 	int turn_degrees = 0;
-// 	int turn_radius = 55*turn_angle*DEGTORAD;
-// 	
-// 	double wheel_length = 2*M_PI*54.9;
-// 	
-// 	turn_degrees = int(round(2*(turn_radius/wheel_length)*360.0));
 
 	_motor_right.reset();
 	_motor_left.reset();
@@ -881,8 +1310,8 @@ int control::rotate_to_wall()
 		if(wheel_turning_speed < 60)
 			wheel_turning_speed = 60;
 		
-		_motor_left.set_pulses_per_second_setpoint(-wheel_turning_speed);
-		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed);
+		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed);
+		_motor_right.set_pulses_per_second_setpoint(-wheel_turning_speed);
 
 		if(_sensor_ultrasonic.value() < minimumDistance)
 		{
@@ -908,12 +1337,25 @@ int control::rotate_to_wall()
 	turn_angle = angleAtMinimumDistance;
 	
 	
-	if(turn_angle < 360)
-		turn_angle += 180;
-	if(turn_angle > 360)
-		turn_angle -= 360;
-	if(turn_angle > 180)
-		turn_angle = -(380 - turn_angle);
+	if((turn_angle < 0))
+	{
+		turn_angle -= 10;
+		if((turn_angle < -360))
+			turn_angle += 360;	
+		if(turn_angle < -180)
+			turn_angle = (360 + turn_angle);
+	}
+	if(turn_angle > 0)
+	{
+		turn_angle += 10;
+		if((turn_angle > 360))
+			turn_angle -= 360;
+		if(turn_angle > 180)
+			turn_angle = -(360 - turn_angle);
+		
+	}
+	
+
 	
 	
 	cout << "start_angle = " << start_angle << "\n";
@@ -927,7 +1369,8 @@ int control::rotate_to_wall()
 	_motor_left.run();
 	_motor_right.run();
 
-	
+	control::turn_gyro(-turn_angle);
+	/*
 	while (_motor_left.running() || _motor_right.running())
 	{
 
@@ -955,8 +1398,8 @@ int control::rotate_to_wall()
 				break;	
 		}
 		
-		_motor_left.set_pulses_per_second_setpoint(-wheel_turning_speed);
-		_motor_right.set_pulses_per_second_setpoint(wheel_turning_speed);
+		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed);
+		_motor_right.set_pulses_per_second_setpoint(-wheel_turning_speed);
 
 		
 		if((angle_difference > turn_angle) && (turn_angle > 0))
@@ -973,6 +1416,8 @@ int control::rotate_to_wall()
 		}
 
 	}
+	*/
+	
 	return minimumDistance;
 	_state = state_idle;
 }
@@ -984,18 +1429,19 @@ int small_back = angle/3;
 int big_back = angle*2/3;
 
 
-_motor_dropper.set_position_setpoint(-24);
+_motor_dropper.set_position_setpoint(-40);
 _motor_dropper.run();
 _state = state_turning;
 while(_motor_dropper.running());
-this_thread::sleep_for(chrono::milliseconds(1000));
+this_thread::sleep_for(chrono::milliseconds(100));
 
+_motor_dropper.set_pulses_per_second_setpoint(100);
 _motor_dropper.set_position_setpoint(20);
 _motor_dropper.run();
 _state = state_turning;
 while(_motor_dropper.running());
-this_thread::sleep_for(chrono::milliseconds(1000));
 
+_motor_dropper.set_pulses_per_second_setpoint(500);
 _motor_dropper.set_position_setpoint(10);
 _motor_dropper.run();
 _state = state_turning;
@@ -1203,7 +1649,7 @@ int main()
 	std::clock_t start;
 	double timePassed;
 
-    start = std::clock();
+	start = std::clock();
 	
 	battery_status();
 	cout << "Please select a mode. \n";
@@ -1213,7 +1659,9 @@ int main()
 	cout << "Color reading -> 3 \n";
 	cout << "Rotate towards the closest wall -> 4 \n";
 	cout << "Localization test -> 5 \n";
-	cout << "Localization with particle filter-> 6 \n";
+	cout << "Localization with particle filter -> 6 \n";
+	cout << "Localize + rotate to point -> 7 \n";
+	cout << "Astar calculator -> 8 \n";
 	cin >> modeSelect;
 
 	printf("Selected mode is %d \n", modeSelect);
@@ -1242,7 +1690,8 @@ int main()
 		break;
 	case 2:
 		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.drive_ultrasonic(1000);
+// 		lego_robot.drive_ultrasonic(1000);
+		lego_robot.turn_gyro(-180);
 		this_thread::sleep_for(chrono::milliseconds(500));
 		lego_robot.turn_gyro(180);
 		break;
@@ -1279,8 +1728,6 @@ int main()
 		lego_robot.turn_gyro(180);
 		break;
 	case 5:
-		while (lego_robot.return_sensor_value(TOUCH));
-		this_thread::sleep_for(chrono::milliseconds(500));
 		while(matchesSum != 1)
 		{
 			readColors[numColorsRead] = lego_robot.print_rgb_values(0);
@@ -1340,6 +1787,64 @@ int main()
 		}
 		cout << "traveledDistance[0] = " << traveledDistance << "\n";
 		break;
+	}
+	case 7:
+	{
+		while(matchesSum != 1)
+		{
+			readColors[numColorsRead] = lego_robot.print_rgb_values(1);
+			numColorsRead += 1;
+			lego_robot.compare_read_colors();
+			cout << "numColorsRead = " << numColorsRead << "\n";
+			cout << "******************************** \n\n";
+			if(matchesSum != 1)
+			{
+				cout << "Driving ... \n";
+				lego_robot.drive_ultrasonic(100);	
+			}
+		}
+		printRobotStatus(lego_robot);
+		
+	
+		lego_robot.rotate_to_point(lego_robot.robot_coordinates.X - 100, lego_robot.robot_coordinates.Y, 0);
+		
+		lego_robot.drive_ultrasonic(100);
+		
+		lego_robot.rotate_to_point(lego_robot.robot_coordinates.X + 100, lego_robot.robot_coordinates.Y, 0);
+		
+		lego_robot.drive_ultrasonic(100);
+	break;
+	}
+	case 8:
+	{
+		while(matchesSum != 1)
+		{
+			readColors[numColorsRead] = lego_robot.print_rgb_values(0);
+			numColorsRead += 1;
+			lego_robot.compare_read_colors();
+			cout << "numColorsRead = " << numColorsRead << "\n";
+			cout << "******************************** \n\n";
+			if(matchesSum != 1)
+			{
+				cout << "Driving ... \n";
+				lego_robot.drive_ultrasonic(100);	
+			}
+		}
+		
+		calculateRoute(lego_robot.robot_coordinates.X/100, lego_robot.robot_coordinates.Y/100, 8, 2, 0, 0);
+		routeX[0];
+		for(int i = 0; i < numberOfSteps; i++)
+		{
+			routeToGoal[0][i] = routeY[i];
+			routeToGoal[1][i] = routeX[i];
+			lego_robot.rotate_to_point(routeToGoal[1][i]*100, routeToGoal[0][i]*100, 0);
+			lego_robot.drive_ultrasonic(100);
+			if(lego_robot.return_sensor_value(TOUCH))
+				break;
+		}
+		lego_robot.turn_gyro(-(lego_robot.robot_coordinates.angle - 90));
+		lego_robot.open_and_close(20);
+	break;
 	}
 	default:
 		cout << "Wrong mode selected !!";
