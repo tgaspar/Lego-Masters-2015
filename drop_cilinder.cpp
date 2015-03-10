@@ -1902,7 +1902,7 @@ int main()
 				int diffX = 0;
 				int diffY = 0;
 				
-// 				index = i;
+				index = i;
 				
 				while(!((differenceArray[0][index] - differenceArray[0][index + 1])||((differenceArray[1][index] - differenceArray[1][index + 1]))))
 				{
@@ -1923,7 +1923,7 @@ int main()
 				printf("X = %d \t Y = %d \n",routeToGoal[1][i]*100, routeToGoal[0][i]*100);
 				lego_robot.rotate_to_point(routeToGoal[1][i]*100, routeToGoal[0][i]*100, 0);
 				this_thread::sleep_for(chrono::milliseconds(500));
-				lego_robot.drive_ultrasonic(100);
+				lego_robot.drive_ultrasonic(sqrtDistance);
 				if(lego_robot.return_sensor_value(TOUCH))
 					break;
 			}
