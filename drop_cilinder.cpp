@@ -84,6 +84,9 @@ int numberOfSteps = 0;
 int routeToGoal[2][200] = {0};
 int routeX[200] = {0};
 int routeY[200] = {0};
+// 
+int dropPoints[3][2] = {{8,2},{4,6},{14,4}};
+
 // map helper functions
 
 int GetMap( int x, int y )
@@ -844,8 +847,8 @@ void control::compare_read_colors()
 						orientationMultiplier = -1;
 						break;
 				}
-			robot_coordinates.X = robot_coordinates.X*100 - round(cos(robot_coordinates.angle));
-			robot_coordinates.Y = robot_coordinates.Y*100 - round(sin(robot_coordinates.angle));
+			robot_coordinates.X = robot_coordinates.X*100 - round(cos(robot_coordinates.angle))*100;
+			robot_coordinates.Y = robot_coordinates.Y*100 - round(sin(robot_coordinates.angle))*100;
 			break;
 			}
 		}
@@ -897,6 +900,7 @@ void control::drive_ultrasonic(int drive_distance)
 	int distance_difference = 0;
 	int start_distance = 0;
 	int final_difference = 0;
+	
 	double wheel_turning_speed_left = 0;
 	double wheel_turning_speed_right = 0;
 	
@@ -931,17 +935,7 @@ void control::drive_ultrasonic(int drive_distance)
  	_motor_left.set_pulses_per_second_setpoint(0);
  	_motor_right.set_pulses_per_second_setpoint(0);
 	
-// 	_motor_left.set_ramp_up(1000);
-// 	_motor_right.set_ramp_up(1000);
-// 	
-// 	
-// 	
-// 	_motor_left.set_ramp_down(2000);
-// 	_motor_right.set_ramp_down(2000);
-// 	
-// 	cout << "_motor_left.ramp_up_sp()  = " << _motor_left.position() << "\n";
-// 	cout << "_motor_right.ramp_up_sp()  = " << _motor_right.position() << "\n";
-// 	
+
 	_motor_left.run();
 	_motor_right.run();
 
@@ -949,7 +943,9 @@ void control::drive_ultrasonic(int drive_distance)
 	_state = state_turning;
 
 	double gyroCorrection = 0;
-	double gyroGain = 0;
+	double gyroGain = 1.1;
+	
+// 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
 	
 	while (_motor_left.running() || _motor_right.running())
 	{
@@ -959,7 +955,7 @@ void control::drive_ultrasonic(int drive_distance)
 
 		if (wheel_turning_speed_left < (turn_degrees - _motor_left.position()))
 		{
-			wheel_turning_speed_left += 0.5;
+			wheel_turning_speed_left += 0.501;
 		}
 		else
 		{
@@ -968,7 +964,7 @@ void control::drive_ultrasonic(int drive_distance)
 		
 		if (wheel_turning_speed_right < (turn_degrees - _motor_right.position()))
 		{
-			wheel_turning_speed_right += 0.501;
+			wheel_turning_speed_right += 0.5;
 		}
 		else
 		{
@@ -1005,9 +1001,11 @@ void control::drive_ultrasonic(int drive_distance)
 		cout << "_motor_left.pulses_per_second_setpoint = " << _motor_left.pulses_per_second_setpoint() << "\n";		
 */	
 	}
-
+	//robot_coordinates.angle = robot_coordinates.angle + _sensor_gyro.value();
 	robot_coordinates.X = robot_coordinates.X + cos(robot_coordinates.angle*DEGTORAD)*drive_distance;
 	robot_coordinates.Y = robot_coordinates.Y + sin(robot_coordinates.angle*DEGTORAD)*drive_distance;
+	
+// 	control::turn_gyro(-_sensor_gyro.value());
 	
 	_state = state_idle;
 }
@@ -1057,7 +1055,10 @@ void control::turn_gyro(int turn_angle)
 	_sensor_gyro.set_mode(gyro_sensor::mode_speed);
 	_sensor_gyro.set_mode(gyro_sensor::mode_angle);
 	
-	turn_angle = -turn_angle;
+	if(turn_angle)
+		turn_angle - 4;
+	
+	turn_angle = -(turn_angle);
 
 	int angle_difference = 0;
 	int start_angle = _sensor_gyro.value();
@@ -1133,13 +1134,13 @@ void control::turn_gyro(int turn_angle)
 		
 		if(wheel_turning_speed  > 800 && (wheel_turning_speed > 0))
 			wheel_turning_speed = 800;
-		if(wheel_turning_speed < 60 && (wheel_turning_speed > 0))
-			wheel_turning_speed = 60;
+		if(wheel_turning_speed < 100 && (wheel_turning_speed > 0))
+			wheel_turning_speed = 100;
 		
 		if((wheel_turning_speed  < -800)  && (wheel_turning_speed < 0))
 			wheel_turning_speed = -800;
-		if((wheel_turning_speed > -60) && (wheel_turning_speed < 0))
-			wheel_turning_speed = -60;
+		if((wheel_turning_speed > -100) && (wheel_turning_speed < 0))
+			wheel_turning_speed = -100;
 		
 // 		cout << "wheel_turning_speed = " << wheel_turning_speed << "\n";
 // 		cout << "angle_difference = " << angle_difference << "\n";
@@ -1149,13 +1150,13 @@ void control::turn_gyro(int turn_angle)
 		_motor_left.set_pulses_per_second_setpoint(wheel_turning_speed);
 		_motor_right.set_pulses_per_second_setpoint(-wheel_turning_speed);
 		
-		if((angle_difference > turn_angle) && (turn_angle > 0))
+		if((angle_difference >= turn_angle) && (turn_angle > 0))
 		{
 				_motor_left.stop();
 				_motor_right.stop();
 				break;
 		}
-		if((angle_difference < turn_angle) && (turn_angle < 0))
+		if((angle_difference <= turn_angle) && (turn_angle < 0))
 		{
 				_motor_left.stop();
 				_motor_right.stop();
@@ -1429,7 +1430,7 @@ void control::open_and_close(int pushSpeed)
 // int big_back = angle*2/3;
 
 
-_motor_dropper.set_position_setpoint(-40);
+_motor_dropper.set_position_setpoint(-60);
 _motor_dropper.run();
 _state = state_turning;
 while(_motor_dropper.running());
@@ -1693,12 +1694,21 @@ int main()
 		break;
 	}
 	case 2:
-		this_thread::sleep_for(chrono::milliseconds(500));
-// 		lego_robot.drive_ultrasonic(1000);
-		lego_robot.turn_gyro(-180);
-		this_thread::sleep_for(chrono::milliseconds(500));
-		lego_robot.turn_gyro(180);
+	{
+		int turnDegrees = 0;
+		while(1)
+		{
+			cout << "Please type the amount of degrees you want the robot to turn \n";
+			cin >> turnDegrees;
+			this_thread::sleep_for(chrono::milliseconds(500));
+			lego_robot.turn_gyro(turnDegrees);
+			this_thread::sleep_for(chrono::milliseconds(500));
+			lego_robot.turn_gyro(-turnDegrees);
+			if(lego_robot.return_sensor_value(TOUCH))
+				break;
+		}
 		break;
+	}
 	case 3:	
 		while (lego_robot.return_sensor_value(TOUCH));			
 		cout << "Press button to read the BLACK color sensor values \n";
@@ -1846,19 +1856,49 @@ int main()
 			}
 		}
 		
-		calculateRoute(lego_robot.robot_coordinates.X/100, lego_robot.robot_coordinates.Y/100, 8, 2, 0, 0);
-		routeX[0];
-		for(int i = 0; i < numberOfSteps; i++)
+		
+		
+		for(int u = 0; u < 3; u++)
 		{
-			routeToGoal[0][i] = routeY[i];
-			routeToGoal[1][i] = routeX[i];
-			lego_robot.rotate_to_point(routeToGoal[1][i]*100, routeToGoal[0][i]*100, 0);
-			lego_robot.drive_ultrasonic(100);
-			if(lego_robot.return_sensor_value(TOUCH))
-				break;
+		calculateRoute(lego_robot.robot_coordinates.X/100, lego_robot.robot_coordinates.Y/100, dropPoints[u][0], dropPoints[u][1], 0, 0);
+			for(int i = 0; i < numberOfSteps; i++)
+			{
+				routeToGoal[0][i] = routeY[i];
+				routeToGoal[1][i] = routeX[i];
+				
+				int index = 1;
+				int diffX = routeToGoal[0][i];
+				int diffY = routeToGoal[1][i];
+				int XorY = 0;
+				int oldXorY = 0;
+				
+				while(1)
+				{
+					XorY = 0;
+					diffX = diffX - routeToGoal[0][i + index];
+					if(!diffX)
+					{
+						diffY = diffY - routeToGoal[i][i + index];
+						XorY = 1;
+					}
+					else
+					{
+						XorY = 0;
+					}
+					
+				}
+				cout << "diffX = " << diffX << "\n";
+				cout << "diffY = " << diffY << "\n";
+				
+				lego_robot.rotate_to_point(routeToGoal[1][i]*100, routeToGoal[0][i]*100, 0);
+				this_thread::sleep_for(chrono::milliseconds(500));
+				lego_robot.drive_ultrasonic(100);
+				if(lego_robot.return_sensor_value(TOUCH))
+					break;
+			}
+			lego_robot.turn_gyro(-(lego_robot.robot_coordinates.angle - 90));
+			lego_robot.open_and_close(80);
 		}
-		lego_robot.turn_gyro(-(lego_robot.robot_coordinates.angle - 90));
-		lego_robot.open_and_close(80);
 	break;
 	}
 	default:
