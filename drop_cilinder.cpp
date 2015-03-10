@@ -1874,7 +1874,7 @@ int main()
 		for(int u = 0; u < 3; u++)
 		{
 		calculateRoute(lego_robot.robot_coordinates.X/100, lego_robot.robot_coordinates.Y/100, dropPoints[u][0], dropPoints[u][1], 0, 0);
-		int index = 1;
+		int index = 0;
 		int XorY = 0;
 		int oldXorY = 0;
 		int differenceArray[2][200] = {0};
@@ -1885,8 +1885,8 @@ int main()
 		
 			for(int k = 0; k < numberOfSteps - 1; k++)
 			{
-				differenceArray[0][k+1] = abs(routeX[k + 1] - routeX[k]);
-				differenceArray[1][k+1] = abs(routeY[k + 1] - routeY[k]);
+				differenceArray[0][k] = abs(routeX[k + 1] - routeX[k]);
+				differenceArray[1][k] = abs(routeY[k + 1] - routeY[k]);
 				cout << "differenceArray[0][" << k << "] =" << differenceArray[0][k];
 				cout << "\t differenceArray[1][" << k << "] = " << differenceArray[1][k]<< "\n";
 				routeToGoal[0][k] = routeY[k];
@@ -1902,21 +1902,19 @@ int main()
 				int diffX = 0;
 				int diffY = 0;
 				
-				if(!(differenceArray[XorY][i] && differenceArray[XorY][i+1]))
+// 				index = i;
+				
+				while(!((differenceArray[0][index] - differenceArray[0][index + 1])||((differenceArray[1][index] - differenceArray[1][index + 1]))))
 				{
-					XorY = XorY;
 					index += 1;
 				}
-				else
-				{
-					XorY = !XorY;
-					index = 1;
-				}
+				
+				i = index;
 
 				cout << " i = " << i << "\n";
-				cout << "index = " << index << "\n";
+// 				cout << "index = " << index << "\n";
 				
-				sqrtDistance = round(sqrt(pow((routeToGoal[i][i]*100 - lego_robot.robot_coordinates.X),2) + pow((routeToGoal[0][i]*100 - lego_robot.robot_coordinates.Y),2)));
+				sqrtDistance = round(sqrt(pow((routeToGoal[1][i]*100 - lego_robot.robot_coordinates.X),2) + pow((routeToGoal[0][i]*100 - lego_robot.robot_coordinates.Y),2)));
 				cout << "sqrtDistance = " << sqrtDistance << "\n";
 				cout << "routeToGoal[0][i]*100  = " << routeToGoal[0][i]*100 << "\n";
 				cout << "lego_robot.robot_coordinates.X = " << lego_robot.robot_coordinates.X << "\n";
